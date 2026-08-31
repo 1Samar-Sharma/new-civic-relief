@@ -4,18 +4,20 @@ import {
   Lock,
   Mail,
   User,
-  Phone,
   AlertTriangle,
   CheckCircle,
-  Sparkles,
   ArrowRight,
   Eye,
   EyeOff,
   ShieldCheck,
-  Key,
+  Crown,
+  HeartPulse,
+  Users,
+  X,
+  Radio,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { MASTER_ADMIN_EMAIL, MASTER_ADMIN_NAME, MASTER_ADMIN_PHONE } from '../../lib/firebase';
+import { MASTER_ADMIN_EMAIL, MASTER_ADMIN_PASSWORD } from '../../lib/firebase';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -33,69 +35,98 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     loginWithGoogle,
     loginWithEmail,
     signupWithEmail,
+    quickDemoLogin,
     setIsRulesModalOpen,
   } = useAuth();
 
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [emailMode, setEmailMode] = useState<'signin' | 'signup'>('signin');
+
+  // Profile Details for Email Registration
+  const [name, setName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [role, setRole] = useState<'resident' | 'volunteer' | 'coordinator' | 'medical'>('resident');
+
+  // Email States
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [role, setRole] = useState<'resident' | 'volunteer' | 'coordinator' | 'medical'>('resident');
   const [showPassword, setShowPassword] = useState(false);
+
+  // Status & Feedback
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  if (!isOpen && currentUser) return null;
+  if (!isOpen) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleClose = () => {
+    // Only allow dismissal if user has an active authenticated session
+    if (!currentUser) {
+      return;
+    }
+    if (canDismiss && onClose) {
+      onClose();
+    }
+  };
+
+  // Email: Sign In / Sign Up
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccessMsg(null);
     setIsLoading(true);
 
     try {
-      if (mode === 'signin') {
+      if (emailMode === 'signin') {
         if (!email.trim() || !password) {
-          throw new Error('Please enter both your registered email and password.');
+          throw new Error('Please enter both your email and password.');
         }
         await loginWithEmail(email.trim(), password);
       } else {
         if (!email.trim() || !password || !name.trim()) {
           throw new Error('Please fill in your full name, email, and password.');
         }
-        await signupWithEmail(email.trim(), password, name.trim(), phone.trim(), role);
+        await signupWithEmail(email.trim(), password, name.trim(), phoneNumber.trim() || undefined, role);
       }
-      if (onClose) onClose();
+      handleClose();
     } catch (err: any) {
-      setError(err.message || 'Authentication failed. Please verify credentials.');
+      setError(err.message || 'Authentication failed. Please check your credentials or create an account.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Google Sign-In
   const handleGoogleSignIn = async () => {
     setError(null);
+    setSuccessMsg(null);
     setIsLoading(true);
     try {
-      await loginWithGoogle();
-      if (onClose) onClose();
+      await loginWithGoogle(email.trim() || undefined);
+      handleClose();
     } catch (err: any) {
-      setError(err.message || 'Google verification could not be completed.');
+      setError(err.message || 'Google authentication could not be completed.');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Master Admin Instant Unlock (Samar Sharma)
+  const handleInstantMasterLogin = () => {
+    setError(null);
+    quickDemoLogin('samar_admin');
+    handleClose();
   };
 
   const setMasterAdminPreset = () => {
-    setMode('signin');
+    setEmailMode('signin');
     setEmail(MASTER_ADMIN_EMAIL);
-    setPassword('');
-    setError('Master Admin detected. Please enter Samar Sharma\'s master admin password.');
+    setPassword(MASTER_ADMIN_PASSWORD);
+    setSuccessMsg('Master Admin credentials populated. Click "Sign In with Password" or "⚡ 1-Click Master Access" below.');
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#050810]/90 backdrop-blur-2xl flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="w-full max-w-lg bg-[#080d1a] border border-white/15 rounded-3xl p-5 sm:p-8 shadow-2xl shadow-black/80 space-y-5 relative overflow-hidden animate-fadeIn text-slate-100">
+    <div className="fixed inset-0 z-50 bg-[#050810]/95 backdrop-blur-2xl flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+      <div className="w-full max-w-lg bg-[#080d1a] border border-white/15 rounded-3xl p-5 sm:p-8 shadow-2xl shadow-black/80 space-y-4 relative overflow-hidden animate-fadeIn text-slate-100 my-auto">
         {/* Glow ambient background */}
         <div className="absolute -top-24 -left-24 w-48 h-48 bg-red-600/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
@@ -103,42 +134,264 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Header */}
         <div className="relative flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-600 to-rose-700 flex items-center justify-center shadow-lg shadow-red-600/30 border border-white/20 flex-shrink-0">
-              <Shield className="w-6 h-6 text-white" />
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-red-600 to-rose-700 flex items-center justify-center shadow-lg shadow-red-600/30 border border-white/20 flex-shrink-0">
+              <Shield className="w-5 h-5 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-extrabold text-white tracking-tight">
-                  CIVIC<span className="text-red-500">RELIEF</span> AUTH
+                  CIVIC<span className="text-red-500">RELIEF</span>
                 </h2>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-bold uppercase tracking-wider">
-                  Verified Identity
+                  Verified Portal
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Verified Emergency Management & Public Safety Defense Net
+                Emergency Response & Civilian Defense Network
               </p>
             </div>
           </div>
 
-          {canDismiss && onClose && currentUser && (
+          {canDismiss && currentUser ? (
             <button
-              onClick={onClose}
-              className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all text-xs"
+              type="button"
+              onClick={handleClose}
+              aria-label="Close auth modal"
+              className="p-2 rounded-xl bg-white/5 hover:bg-white/15 text-slate-400 hover:text-white transition-all text-xs border border-white/10"
             >
-              ✕
+              <X className="w-4 h-4" />
             </button>
+          ) : (
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-red-500/20 border border-red-500/40 text-red-300 text-[10px] font-bold uppercase tracking-wider">
+              <Lock className="w-3 h-3" />
+              <span>Login Required</span>
+            </div>
           )}
         </div>
 
-        {/* Google One-Click Official Auth Banner */}
+        {/* Mandatory Authentication Notice */}
+        {!currentUser && (
+          <div className="p-3 rounded-2xl bg-gradient-to-r from-red-600/15 via-rose-600/10 to-amber-600/10 border border-red-500/30 flex items-start gap-2.5">
+            <Shield className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="text-xs">
+              <span className="font-bold text-red-200">Mandatory Login: </span>
+              <span className="text-slate-300">
+                You must sign in with your email or Google account to access the emergency radar, live GPS tracking, and relief services.
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Master Admin Quick Access Bar */}
+        <div className="p-3 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-600/10 to-transparent border border-amber-500/30 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Crown className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-bold text-amber-200">
+                Master Administrator (Control Desk)
+              </span>
+            </div>
+            <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/40 font-mono">
+              Root Authority
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleInstantMasterLogin}
+              className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold text-xs shadow-md shadow-amber-600/20 transition-all flex items-center justify-center gap-1.5"
+            >
+              <span>⚡ 1-Click Master Access</span>
+            </button>
+            <button
+              type="button"
+              onClick={setMasterAdminPreset}
+              className="py-2 px-3 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-slate-200 text-xs font-bold transition-all"
+            >
+              Fill Credentials
+            </button>
+          </div>
+        </div>
+
+        {/* Mode Switcher: Sign In vs Sign Up */}
+        <div className="flex p-1 bg-white/5 rounded-2xl border border-white/10">
+          <button
+            type="button"
+            onClick={() => {
+              setEmailMode('signin');
+              setError(null);
+              setSuccessMsg(null);
+            }}
+            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
+              emailMode === 'signin'
+                ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-md shadow-red-600/30'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Sign In with Email
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setEmailMode('signup');
+              setError(null);
+              setSuccessMsg(null);
+            }}
+            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
+              emailMode === 'signup'
+                ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-md shadow-red-600/30'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Create New Account
+          </button>
+        </div>
+
+        {/* Feedback Messages */}
+        {error && (
+          <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            <span className="flex-1">{error}</span>
+          </div>
+        )}
+
+        {successMsg && (
+          <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 flex-shrink-0" />
+            <span className="flex-1">{successMsg}</span>
+          </div>
+        )}
+
+        {/* Email & Password Form */}
+        <form onSubmit={handleEmailSubmit} className="space-y-3 text-xs">
+          {emailMode === 'signup' && (
+            <>
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  Full Name / Call Sign:
+                </label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Alex Morgan"
+                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:outline-none focus:border-red-500 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  Primary Civic Role:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRole('resident')}
+                    className={`p-2 rounded-xl border text-left flex items-center gap-2 transition-all ${
+                      role === 'resident'
+                        ? 'bg-purple-500/20 border-purple-500/50 text-white'
+                        : 'bg-white/5 border-white/10 text-slate-400'
+                    }`}
+                  >
+                    <Users className="w-4 h-4 text-purple-400" />
+                    <div>
+                      <span className="font-bold block text-[11px]">Resident</span>
+                      <span className="text-[9px] text-slate-400">Civilian member</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRole('volunteer')}
+                    className={`p-2 rounded-xl border text-left flex items-center gap-2 transition-all ${
+                      role === 'volunteer'
+                        ? 'bg-emerald-500/20 border-emerald-500/50 text-white'
+                        : 'bg-white/5 border-white/10 text-slate-400'
+                    }`}
+                  >
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <div>
+                      <span className="font-bold block text-[11px]">Guardian</span>
+                      <span className="text-[9px] text-slate-400">Aid responder</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          <div>
+            <label className="block text-slate-300 font-semibold mb-1">
+              Email Address:
+            </label>
+            <div className="relative">
+              <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="e.g. resident@civicrelief.org"
+                className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:outline-none focus:border-red-500 text-xs"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-slate-300 font-semibold mb-1">
+              Password:
+            </label>
+            <div className="relative">
+              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••••••"
+                className="w-full pl-9 pr-10 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:outline-none focus:border-red-500 font-mono text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3 text-slate-400 hover:text-white"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs sm:text-sm shadow-lg shadow-red-600/40 transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
+          >
+            {isLoading ? (
+              <span>Authenticating...</span>
+            ) : emailMode === 'signin' ? (
+              <>
+                <span>Sign In with Email</span> <ArrowRight className="w-4 h-4" />
+              </>
+            ) : (
+              <>
+                <span>Create & Enter Platform</span> <CheckCircle className="w-4 h-4" />
+              </>
+            )}
+          </button>
+        </form>
+
+        {/* Google One-Click Alternative */}
         <button
           type="button"
           disabled={isLoading}
           onClick={handleGoogleSignIn}
-          className="w-full py-3 px-4 rounded-2xl bg-white hover:bg-slate-100 text-slate-900 border border-white/20 text-xs sm:text-sm font-bold flex items-center justify-center gap-3 shadow-lg shadow-white/10 transition-all active:scale-[0.98]"
+          className="w-full py-2.5 px-4 rounded-2xl bg-white/10 hover:bg-white/15 text-white border border-white/15 text-xs font-semibold flex items-center justify-center gap-2.5 transition-all active:scale-[0.98]"
         >
-          <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24">
             <path
               fill="#4285F4"
               d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -156,208 +409,71 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
             />
           </svg>
-          <span>Continue with Verified Google Account</span>
+          <span>Continue with Google Account</span>
         </button>
 
-        <div className="relative flex items-center justify-center my-2">
-          <div className="border-t border-white/10 w-full" />
-          <span className="bg-[#080d1a] px-3 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-            Or Use Email & Password
+        {/* Quick Role Demo Switchers */}
+        <div className="space-y-1.5 pt-1 border-t border-white/10">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+            Instant 1-Click Role Access:
           </span>
-          <div className="border-t border-white/10 w-full" />
-        </div>
-
-        {/* Mode Selector Tabs */}
-        <div className="flex p-1 bg-white/5 rounded-2xl border border-white/10">
-          <button
-            type="button"
-            onClick={() => {
-              setMode('signin');
-              setError(null);
-            }}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
-              mode === 'signin'
-                ? 'bg-red-600 text-white shadow-md shadow-red-600/30'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Sign In to Account
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode('signup');
-              setError(null);
-            }}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
-              mode === 'signup'
-                ? 'bg-red-600 text-white shadow-md shadow-red-600/30'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Create New Profile
-          </button>
-        </div>
-
-        {/* Error Feedback */}
-        {error && (
-          <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
-          {mode === 'signup' && (
-            <>
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">
-                  Full Name / Civilian Call Sign:
-                </label>
-                <div className="relative">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Samar Sharma / Alex Doe"
-                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:outline-none focus:border-red-500"
-                  />
-                </div>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                quickDemoLogin('volunteer');
+                handleClose();
+              }}
+              className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 text-left transition-all group"
+            >
+              <div className="flex items-center gap-1.5 text-emerald-300 font-bold text-[11px]">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Guardian</span>
               </div>
+              <p className="text-[10px] text-slate-400 truncate mt-0.5">Volunteer</p>
+            </button>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">
-                    Contact Phone Number:
-                  </label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="e.g. 9317230299"
-                      className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:outline-none focus:border-red-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">
-                    Your Primary Civic Role:
-                  </label>
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value as any)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:border-red-500"
-                  >
-                    <option value="resident" className="bg-slate-900 text-white">Civilian Resident</option>
-                    <option value="volunteer" className="bg-slate-900 text-white">Community Guardian / Volunteer</option>
-                    <option value="medical" className="bg-slate-900 text-white">Medical / First Responder</option>
-                    <option value="coordinator" className="bg-slate-900 text-white">Emergency Coordinator</option>
-                  </select>
-                </div>
+            <button
+              type="button"
+              onClick={() => {
+                quickDemoLogin('medical');
+                handleClose();
+              }}
+              className="p-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 text-left transition-all group"
+            >
+              <div className="flex items-center gap-1.5 text-blue-300 font-bold text-[11px]">
+                <HeartPulse className="w-3.5 h-3.5" />
+                <span>Medical</span>
               </div>
-            </>
-          )}
+              <p className="text-[10px] text-slate-400 truncate mt-0.5">Responder</p>
+            </button>
 
-          <div>
-            <label className="block text-slate-300 font-semibold mb-1">
-              Registered Gmail / Email Address:
-            </label>
-            <div className="relative">
-              <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="e.g. user@gmail.com"
-                className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:outline-none focus:border-red-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-slate-300 font-semibold mb-1">
-              Password:
-            </label>
-            <div className="relative">
-              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
-              <input
-                type={showPassword ? 'text' : 'password'}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••••••"
-                className="w-full pl-9 pr-10 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:outline-none focus:border-red-500"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-3 text-slate-400 hover:text-white"
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-            {mode === 'signup' && (
-              <p className="text-[10px] text-slate-400 mt-1">
-                Must be at least 6 characters. You can update this password later in your About/Profile section.
-              </p>
-            )}
-          </div>
-
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs sm:text-sm shadow-lg shadow-red-600/40 transition-all flex items-center justify-center gap-2 mt-2"
-          >
-            {isLoading ? (
-              <span>Verifying Credentials...</span>
-            ) : mode === 'signin' ? (
-              <>
-                <span>Sign In with Password</span> <ArrowRight className="w-4 h-4" />
-              </>
-            ) : (
-              <>
-                <span>Register Verified Account</span> <CheckCircle className="w-4 h-4" />
-              </>
-            )}
-          </button>
-        </form>
-
-        {/* Master Admin Fast Preset */}
-        <div className="pt-2">
-          <button
-            type="button"
-            onClick={setMasterAdminPreset}
-            className="w-full p-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-200 text-left transition-all flex items-center justify-between text-xs"
-          >
-            <div className="flex items-center gap-2.5">
-              <span className="text-base">👑</span>
-              <div>
-                <span className="font-bold text-amber-300">Master Admin Authority Access</span>
-                <p className="text-[10px] text-slate-400">Chief Executive Command Portal</p>
+            <button
+              type="button"
+              onClick={() => {
+                quickDemoLogin('resident');
+                handleClose();
+              }}
+              className="p-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/25 text-left transition-all group"
+            >
+              <div className="flex items-center gap-1.5 text-purple-300 font-bold text-[11px]">
+                <Users className="w-3.5 h-3.5" />
+                <span>Resident</span>
               </div>
-            </div>
-            <span className="text-[10px] font-semibold text-amber-400 bg-amber-500/20 px-2.5 py-1 rounded-full border border-amber-500/30">
-              Enter Key
-            </span>
-          </button>
+              <p className="text-[10px] text-slate-400 truncate mt-0.5">Civilian</p>
+            </button>
+          </div>
         </div>
 
         {/* Footer Rules link */}
-        <div className="pt-2 text-center border-t border-white/10 text-[11px] text-slate-400">
-          By signing in, you agree to the{' '}
+        <div className="pt-1.5 text-center border-t border-white/10 text-[11px] text-slate-400">
+          By authenticating, you agree to the{' '}
           <button
             type="button"
             onClick={() => setIsRulesModalOpen(true)}
             className="text-red-400 font-bold underline hover:text-red-300 ml-1"
           >
-            Civic Rules & False-Alarm Penalties
+            Civic Rules & Penalties
           </button>
         </div>
       </div>

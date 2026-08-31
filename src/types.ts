@@ -108,7 +108,8 @@ export type AidCategory =
   | 'food_water'
   | 'clothing'
   | 'medical'
-  | 'power_transport';
+  | 'power_transport'
+  | 'wildfire_evac';
 
 export type AidUrgency = 'immediate_life_threat' | 'within_2_hours' | 'today' | 'within_48_hours';
 

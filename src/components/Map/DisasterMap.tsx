@@ -23,18 +23,15 @@ import {
   ArrowLeft,
   X,
   MapPin,
-  Sparkles,
-  Key,
 } from 'lucide-react';
 import { calculateDistanceKm, formatDistance } from '../../utils/geo';
 import { useAuth } from '../../context/AuthContext';
 import {
   resolveWomenSafetyAlertDoc,
   updateHelpRequestStatusDoc,
-  MASTER_ADMIN_NAME,
-  MASTER_ADMIN_PHONE,
+  PUBLIC_COMMAND_NAME,
+  PUBLIC_HELPLINE_PHONE,
 } from '../../lib/firebase';
-import { GoogleMapsView } from './GoogleMapsView';
 
 interface DisasterMapProps {
   alerts?: DisasterAlert[];
@@ -55,6 +52,8 @@ interface DisasterMapProps {
   onSelectSafeHaven?: (haven: SafeHavenPoint) => void;
   onRequestAidAtLocation?: (coords: Coordinates) => void;
   onOpenBroadcastModal?: () => void;
+  onUpdateUserLocation?: (coords: Coordinates, address?: string) => void;
+  onTriggerGPS?: () => void;
 }
 
 export const DisasterMap: React.FC<DisasterMapProps> = ({
@@ -74,6 +73,8 @@ export const DisasterMap: React.FC<DisasterMapProps> = ({
   onSelectSafeHaven,
   onRequestAidAtLocation,
   onOpenBroadcastModal,
+  onUpdateUserLocation,
+  onTriggerGPS,
 }) => {
   const { isAuthorOrAdmin } = useAuth();
   const alerts = alertsProp || disasterAlertsProp || [];
@@ -93,18 +94,10 @@ export const DisasterMap: React.FC<DisasterMapProps> = ({
   const [clickCoords, setClickCoords] = useState<Coordinates | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
-  // Map Provider State (defaults cleanly to full free OpenStreetMap)
-  const envGoogleKey = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY || '';
-  const [googleApiKey] = useState<string>(() => {
-    return localStorage.getItem('custom_gmaps_key') || envGoogleKey;
-  });
-  const [mapProvider, setMapProvider] = useState<'google' | 'leaflet'>(() => {
-    const saved = localStorage.getItem('preferred_map_provider');
-    if (saved === 'google' && (localStorage.getItem('custom_gmaps_key') || envGoogleKey)) {
-      return 'google';
-    }
-    return 'leaflet';
-  });
+  // Tile Layer Style (100% Free, High-Clarity Place Names, 0 Watermarks)
+  const [mapStyle, setMapStyle] = useState<'osm' | 'voyager' | 'satellite' | 'humanitarian'>('osm');
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const labelLayerRef = useRef<L.TileLayer | null>(null);
 
   // Initialize Leaflet Map with ResizeObserver & size invalidation
   useEffect(() => {
@@ -118,15 +111,15 @@ export const DisasterMap: React.FC<DisasterMapProps> = ({
       center: [safeLat, safeLng],
       zoom: 13,
       zoomControl: true,
+      attributionControl: false,
     });
 
-    // Clean OpenStreetMap tiles with Voyager styling
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    // Default to OpenStreetMap with full street and place names
+    const baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      subdomains: 'abcd',
+      subdomains: ['a', 'b', 'c'],
     }).addTo(map);
+    tileLayerRef.current = baseLayer;
 
     const layerGroup = L.layerGroup().addTo(map);
     layerGroupRef.current = layerGroup;
@@ -162,12 +155,54 @@ export const DisasterMap: React.FC<DisasterMapProps> = ({
     };
   }, []);
 
-  // Update center when userLocation changes
+  // Handle Tile Style changes dynamically without reloading map
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    if (tileLayerRef.current) {
+      map.removeLayer(tileLayerRef.current);
+      tileLayerRef.current = null;
+    }
+    if (labelLayerRef.current) {
+      map.removeLayer(labelLayerRef.current);
+      labelLayerRef.current = null;
+    }
+
+    if (mapStyle === 'osm') {
+      tileLayerRef.current = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        subdomains: ['a', 'b', 'c'],
+      }).addTo(map);
+    } else if (mapStyle === 'voyager') {
+      tileLayerRef.current = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19,
+        subdomains: 'abcd',
+      }).addTo(map);
+    } else if (mapStyle === 'satellite') {
+      tileLayerRef.current = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19,
+      }).addTo(map);
+      // High-contrast place names and road labels overlay
+      labelLayerRef.current = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19,
+        subdomains: 'abcd',
+      }).addTo(map);
+    } else if (mapStyle === 'humanitarian') {
+      tileLayerRef.current = L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        subdomains: ['a', 'b', 'c'],
+      }).addTo(map);
+    }
+  }, [mapStyle]);
+
+  // Update center and invalidate size when userLocation changes
   useEffect(() => {
     if (mapInstanceRef.current && Number.isFinite(userLocation.lat) && Number.isFinite(userLocation.lng)) {
       mapInstanceRef.current.invalidateSize();
+      mapInstanceRef.current.setView([userLocation.lat, userLocation.lng], mapInstanceRef.current.getZoom() || 13);
     }
-  }, [userLocation]);
+  }, [userLocation.lat, userLocation.lng]);
 
   // Update Markers & Danger Polygons when data or filters change
   useEffect(() => {
@@ -426,7 +461,8 @@ export const DisasterMap: React.FC<DisasterMapProps> = ({
   }, [alerts, womenAlerts, helpRequests, volunteers, safeHavens, activeLayerFilter, userLocation]);
 
   const recenterMap = () => {
-    if (mapInstanceRef.current) {
+    onTriggerGPS?.();
+    if (mapInstanceRef.current && Number.isFinite(userLocation.lat) && Number.isFinite(userLocation.lng)) {
       mapInstanceRef.current.flyTo([userLocation.lat, userLocation.lng], 14, {
         duration: 1.2,
       });
@@ -437,37 +473,6 @@ export const DisasterMap: React.FC<DisasterMapProps> = ({
     setSelectedEntity(null);
     setSelectedType(null);
   };
-
-  const handleSwitchProvider = (provider: 'google' | 'leaflet') => {
-    setMapProvider(provider);
-    localStorage.setItem('preferred_map_provider', provider);
-  };
-
-  // If user has a configured Google API key and selected Google Maps, render GoogleMapsView
-  if (mapProvider === 'google' && googleApiKey) {
-    return (
-      <div className="relative w-full h-[calc(100vh-8.5rem)] min-h-[550px] flex flex-col rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
-        <GoogleMapsView
-          apiKey={googleApiKey}
-          alerts={alerts}
-          womenAlerts={womenAlerts}
-          helpRequests={helpRequests}
-          volunteers={volunteers}
-          safeHavens={safeHavens}
-          userLocation={userLocation}
-          userAddress={userAddress}
-          activeSignal={activeSignal}
-          onSelectAlert={onSelectAlert}
-          onSelectSOS={onSelectSOS}
-          onSelectHelpRequest={onSelectHelpRequest}
-          onSelectSafeHaven={onSelectSafeHaven}
-          onRequestAidAtLocation={onRequestAidAtLocation}
-          onOpenBroadcastModal={onOpenBroadcastModal}
-          onSwitchToLeaflet={() => handleSwitchProvider('leaflet')}
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="relative w-full h-[calc(100vh-8.5rem)] min-h-[550px] bg-[#050810]/60 flex flex-col rounded-2xl overflow-hidden border border-white/10 shadow-2xl backdrop-blur-xl">
@@ -531,18 +536,44 @@ export const DisasterMap: React.FC<DisasterMapProps> = ({
           </button>
         </div>
 
-        {/* GPS & Radar Controls */}
+        {/* GPS, Radar & Place Names Map Style Controls */}
         <div className="flex items-center gap-2 pointer-events-auto">
-          {googleApiKey && (
+          {/* Map Style Selector (Places & Streets) */}
+          <div className="flex items-center bg-[#050810]/90 backdrop-blur-xl p-1 rounded-2xl border border-white/10 shadow-lg text-xs">
             <button
-              onClick={() => handleSwitchProvider('google')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-400/40 shadow-lg text-xs font-bold backdrop-blur-xl transition-all"
-              title="Switch to Google Maps Platform"
+              onClick={() => setMapStyle('osm')}
+              className={`px-2.5 py-1 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all ${
+                mapStyle === 'osm'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Standard OpenStreetMap (Clear Place Names & Streets, Zero Watermark)"
             >
-              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Google Maps</span>
+              📍 Places & Streets
             </button>
-          )}
+            <button
+              onClick={() => setMapStyle('voyager')}
+              className={`px-2.5 py-1 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all ${
+                mapStyle === 'voyager'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="CartoDB Voyager (High Clarity Place Labels)"
+            >
+              🏙️ Clean
+            </button>
+            <button
+              onClick={() => setMapStyle('satellite')}
+              className={`px-2.5 py-1 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all ${
+                mapStyle === 'satellite'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Satellite with Place Names & Road Labels"
+            >
+              🛰️ Satellite + Labels
+            </button>
+          </div>
 
           <button
             onClick={() => setShow5kmRadar(!show5kmRadar)}
@@ -590,30 +621,41 @@ export const DisasterMap: React.FC<DisasterMapProps> = ({
 
       {/* Click Map Helper Toast */}
       {clickCoords && !selectedEntity && (
-        <div className="absolute top-16 left-1/2 transform -translate-x-1/2 z-[1000] bg-[#050810]/95 border border-amber-500/50 text-slate-200 px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-3 text-xs backdrop-blur-xl animate-fadeIn">
+        <div className="absolute top-16 left-1/2 transform -translate-x-1/2 z-[1000] bg-[#050810]/95 border border-emerald-500/50 text-slate-200 px-4 py-2.5 rounded-2xl shadow-2xl flex flex-col sm:flex-row items-start sm:items-center gap-3 text-xs backdrop-blur-xl animate-fadeIn">
           <div>
-            <p className="font-bold text-amber-300">
-              Selected Point: {clickCoords.lat.toFixed(4)}, {clickCoords.lng.toFixed(4)}
+            <p className="font-bold text-emerald-300">
+              📍 Point: {clickCoords.lat.toFixed(4)}°, {clickCoords.lng.toFixed(4)}°
             </p>
             <p className="text-[11px] text-slate-400">
-              Request aid or report an incident at this location?
+              Set active post or request mutual aid at this point:
             </p>
           </div>
-          <button
-            onClick={() => {
-              onRequestAidAtLocation?.(clickCoords);
-              setClickCoords(null);
-            }}
-            className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold whitespace-nowrap"
-          >
-            Request Aid Here
-          </button>
-          <button
-            onClick={() => setClickCoords(null)}
-            className="text-slate-400 hover:text-slate-200 text-sm font-bold ml-1"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                onUpdateUserLocation?.(clickCoords);
+                setClickCoords(null);
+              }}
+              className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold whitespace-nowrap transition-all shadow-md"
+            >
+              Set My Location
+            </button>
+            <button
+              onClick={() => {
+                onRequestAidAtLocation?.(clickCoords);
+                setClickCoords(null);
+              }}
+              className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold whitespace-nowrap transition-all shadow-md"
+            >
+              Request Aid Here
+            </button>
+            <button
+              onClick={() => setClickCoords(null)}
+              className="text-slate-400 hover:text-slate-200 text-sm font-bold ml-1"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       )}
 
@@ -742,7 +784,7 @@ export const DisasterMap: React.FC<DisasterMapProps> = ({
                   <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-400 text-[11px] flex items-start gap-2">
                     <Lock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
                     <span>
-                      Resolution restricted to author or Admin ({MASTER_ADMIN_NAME}: {MASTER_ADMIN_PHONE}).
+                      Resolution restricted to author or {PUBLIC_COMMAND_NAME} (Helpline: {PUBLIC_HELPLINE_PHONE}).
                     </span>
                   </div>
                 )
@@ -846,7 +888,7 @@ export const DisasterMap: React.FC<DisasterMapProps> = ({
                   <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-400 text-[11px] flex items-start gap-2">
                     <Lock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
                     <span>
-                      Closing restricted to author ({selectedEntity.requesterName}) or Admin ({MASTER_ADMIN_NAME}).
+                      Closing restricted to author ({selectedEntity.requesterName}) or {PUBLIC_COMMAND_NAME}.
                     </span>
                   </div>
                 )

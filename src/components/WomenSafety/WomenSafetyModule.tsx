@@ -23,7 +23,7 @@ import {
 import { WomenSafetyAlert, SafeHavenPoint, Coordinates } from '../../types';
 import { soundPlayer } from '../../utils/audio';
 import { useAuth } from '../../context/AuthContext';
-import { MASTER_ADMIN_NAME, MASTER_ADMIN_PHONE } from '../../lib/firebase';
+import { PUBLIC_COMMAND_NAME } from '../../lib/firebase';
 
 interface WomenSafetyModuleProps {
   alerts: WomenSafetyAlert[];
@@ -119,8 +119,8 @@ export const WomenSafetyModule: React.FC<WomenSafetyModuleProps> = ({
       return;
     }
     if (val === '=') {
-      // Secret distress trigger code '911' or '999'
-      if (calculatorInput.includes('911') || calculatorInput.includes('999')) {
+      // Secret distress trigger code '100' or '911' or '999'
+      if (calculatorInput.includes('100') || calculatorInput.includes('911') || calculatorInput.includes('999')) {
         onTriggerSOS('Discreet SOS triggered from Decoy Calculator Mode', true);
         setCalculatorInput('Error 001');
       } else {
@@ -191,13 +191,13 @@ export const WomenSafetyModule: React.FC<WomenSafetyModuleProps> = ({
               {btn}
             </button>
           ))}
-          {['0', '.', '911', '='].map((btn) => (
+          {['0', '.', '100', '='].map((btn) => (
             <button
               key={btn}
               onClick={() => handleCalculatorPress(btn)}
               className={`p-3 rounded-xl active:scale-95 ${
-                btn === '911'
-                  ? 'bg-red-500/20 text-red-300 border border-red-500/50 hover:bg-red-500/30'
+                btn === '100'
+                  ? 'bg-red-500/20 text-red-300 border border-red-500/50 hover:bg-red-500/30 font-bold'
                   : btn === '='
                   ? 'bg-emerald-500 text-black font-bold hover:bg-emerald-400'
                   : 'bg-white/[0.03] hover:bg-white/[0.08] border border-white/5 text-slate-200'
@@ -209,7 +209,7 @@ export const WomenSafetyModule: React.FC<WomenSafetyModuleProps> = ({
         </div>
 
         <p className="text-[10px] text-slate-400 text-center mt-3">
-          Tip: Punch <span className="text-red-400 font-mono font-bold">911 =</span> to silently transmit live GPS coordinates to verified neighborhood guardians.
+          Tip: Punch <span className="text-red-400 font-mono font-bold">100 =</span> to silently transmit live GPS coordinates to verified neighborhood guardians.
         </p>
       </div>
     );
@@ -351,10 +351,10 @@ export const WomenSafetyModule: React.FC<WomenSafetyModuleProps> = ({
               </button>
 
               <a
-                href="tel:911"
+                href="tel:100"
                 className="px-4 py-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 text-xs font-bold flex items-center justify-center gap-1 backdrop-blur-md"
               >
-                <Phone className="w-3.5 h-3.5 text-red-400" /> 911
+                <Phone className="w-3.5 h-3.5 text-red-400" /> 100
               </a>
             </div>
           </div>
@@ -422,7 +422,7 @@ export const WomenSafetyModule: React.FC<WomenSafetyModuleProps> = ({
                 <span className="font-bold text-red-300">EMERGENCY PROTOCOL & RESOLUTION POLICY:</span>
                 <p className="text-slate-300 text-[11px] mt-0.5">
                   "If false thing posted then fines and punishment will be rewarded as a beautiful gift by society, volunteers, and government."
-                  Only the user who initiated the beacon or authorized Admin (<strong>{MASTER_ADMIN_NAME}</strong>) can mark it safe or close it.
+                  Only the user who initiated the beacon or authorized Admin (<strong>{PUBLIC_COMMAND_NAME}</strong>) can mark it safe or close it.
                 </p>
               </div>
             </div>
@@ -495,7 +495,7 @@ export const WomenSafetyModule: React.FC<WomenSafetyModuleProps> = ({
                         ) : (
                           <span
                             className="px-2.5 py-1.5 rounded-xl bg-white/5 border border-white/10 text-slate-500 text-[10px] flex items-center gap-1"
-                            title={`Only author (${alert.authorName || 'Requester'}) or Admin (${MASTER_ADMIN_NAME}) can mark safe.`}
+                            title={`Only author (${alert.authorName || 'Requester'}) or ${PUBLIC_COMMAND_NAME} can mark safe.`}
                           >
                             <Lock className="w-3 h-3 text-amber-500" />
                             Author/Admin Only

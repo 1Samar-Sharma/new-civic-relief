@@ -36,8 +36,6 @@ import { useAuth } from '../../context/AuthContext';
 import {
   resolveWomenSafetyAlertDoc,
   updateHelpRequestStatusDoc,
-  MASTER_ADMIN_NAME,
-  MASTER_ADMIN_PHONE,
 } from '../../lib/firebase';
 
 interface GoogleMapsViewProps {
@@ -110,6 +108,16 @@ export const GoogleMapsView: React.FC<GoogleMapsViewProps> = ({
     setCamera(e.detail);
   };
 
+  // Keep camera centered when userLocation coordinates change
+  React.useEffect(() => {
+    if (Number.isFinite(userLocation.lat) && Number.isFinite(userLocation.lng)) {
+      setCamera((prev) => ({
+        ...prev,
+        center: { lat: userLocation.lat, lng: userLocation.lng },
+      }));
+    }
+  }, [userLocation.lat, userLocation.lng]);
+
   const handleRecenter = () => {
     setCamera({
       center: {
@@ -130,21 +138,21 @@ export const GoogleMapsView: React.FC<GoogleMapsViewProps> = ({
 
   const filteredSOS = useMemo(() => {
     if (activeLayerFilter === 'all' || activeLayerFilter === 'sos') {
-      return womenAlerts.filter((s) => s.status === 'active');
+      return womenAlerts.filter((s) => s.status === 'active_sos' || s.status === 'responder_en_route' || (s.status as string) === 'active');
     }
     return [];
   }, [womenAlerts, activeLayerFilter]);
 
   const filteredRequests = useMemo(() => {
     if (activeLayerFilter === 'all' || activeLayerFilter === 'aid') {
-      return helpRequests.filter((r) => r.status === 'open' || r.status === 'in-progress');
+      return helpRequests.filter((r) => r.status === 'open' || r.status === 'matched' || r.status === 'in_progress' || (r.status as string) === 'in-progress');
     }
     return [];
   }, [helpRequests, activeLayerFilter]);
 
   const filteredVolunteers = useMemo(() => {
     if (activeLayerFilter === 'all' || activeLayerFilter === 'volunteers') {
-      return volunteers.filter((v) => v.status === 'available');
+      return volunteers.filter((v) => v.isAvailable !== false || (v as any).status === 'available');
     }
     return [];
   }, [volunteers, activeLayerFilter]);
@@ -406,9 +414,8 @@ export const GoogleMapsView: React.FC<GoogleMapsViewProps> = ({
                         </a>
                       )}
                       {isAuthorOrAdmin(
-                        selectedItem.data.userId || selectedItem.data.phone,
-                        MASTER_ADMIN_NAME,
-                        MASTER_ADMIN_PHONE
+                        selectedItem.data.userId,
+                        selectedItem.data.authorEmail
                       ) && (
                         <button
                           onClick={() => handleResolveSOS(selectedItem.data.id)}
@@ -436,9 +443,8 @@ export const GoogleMapsView: React.FC<GoogleMapsViewProps> = ({
                       {selectedItem.data.category}
                     </div>
                     {isAuthorOrAdmin(
-                      selectedItem.data.userId || selectedItem.data.phone,
-                      MASTER_ADMIN_NAME,
-                      MASTER_ADMIN_PHONE
+                      selectedItem.data.userId,
+                      selectedItem.data.authorEmail
                     ) && (
                       <button
                         onClick={() => handleResolveAid(selectedItem.data.id)}

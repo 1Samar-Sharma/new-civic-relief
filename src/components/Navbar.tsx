@@ -17,6 +17,7 @@ import {
   Bell,
   BellRing,
   ArrowLeft,
+  Flame,
 } from 'lucide-react';
 import { soundPlayer } from '../utils/audio';
 import { useAuth } from '../context/AuthContext';
@@ -267,6 +268,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
 
           <button
+            onClick={() => changeTab('forest_fire')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all relative ${
+              activeTab === 'forest_fire'
+                ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/30'
+                : 'bg-orange-500/10 text-orange-300 border border-orange-500/30 hover:bg-orange-500/20'
+            }`}
+          >
+            <Flame className="w-4 h-4 text-orange-400" />
+            <span>Wildfire Watch</span>
+          </button>
+
+          <button
             onClick={() => changeTab('weather_gpt')}
             className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold transition-all ${
               activeTab === 'weather_gpt'
@@ -361,8 +374,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
 
-      {/* Mobile Navigation Strip (4 Clean Touch Tabs) */}
-      <div className="md:hidden grid grid-cols-4 px-2 py-1.5 bg-black/60 border-t border-white/10 text-[11px] gap-1">
+      {/* Mobile Navigation Strip (5 Clean Touch Tabs) */}
+      <div className="md:hidden grid grid-cols-5 px-1.5 py-1.5 bg-black/60 border-t border-white/10 text-[10px] gap-1">
         <button
           onClick={() => changeTab('map')}
           className={`flex flex-col items-center py-1 rounded-lg font-bold transition-all ${
@@ -380,7 +393,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           }`}
         >
           <Shield className="w-3.5 h-3.5 mb-0.5" />
-          <span>Women SOS</span>
+          <span>Women</span>
           {activeSOSCount > 0 && (
             <span className="absolute top-1 right-2 h-1.5 w-1.5 rounded-full bg-rose-400 animate-ping" />
           )}
@@ -397,6 +410,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           {openHelpRequestCount > 0 && (
             <span className="absolute top-1 right-2 h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
           )}
+        </button>
+
+        <button
+          onClick={() => changeTab('forest_fire')}
+          className={`flex flex-col items-center py-1 rounded-lg font-bold transition-all relative ${
+            activeTab === 'forest_fire' ? 'bg-orange-600 text-white' : 'text-orange-400'
+          }`}
+        >
+          <Flame className="w-3.5 h-3.5 mb-0.5" />
+          <span>Wildfire</span>
         </button>
 
         <button

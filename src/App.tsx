@@ -34,7 +34,13 @@ import { AdminManagementModal } from './components/Admin/AdminManagementModal';
 import { RulesModal } from './components/Rules/RulesModal';
 import { UserProfileModal } from './components/Auth/UserProfileModal';
 import { useAuth } from './context/AuthContext';
-import { reverseGeocode, fetchNearbyRealSafeHavens } from './utils/geo';
+import {
+  reverseGeocode,
+  fetchNearbyRealSafeHavens,
+  detectRealLocation,
+  getSavedUserLocation,
+  saveUserLocationToCache,
+} from './utils/geo';
 import { soundPlayer } from './utils/audio';
 import { notificationService } from './utils/notifications';
 
@@ -83,15 +89,28 @@ export default function App() {
     'map' | 'weather_gpt' | 'women_safety' | 'forest_fire' | 'early_warning' | 'mutual_aid' | 'community'
   >('map');
 
-  // User Geolocation (Default to central zone)
-  const [userLocation, setUserLocation] = useState<Coordinates>({
-    lat: 37.7749,
-    lng: -122.4194,
+  // User Geolocation (Initialized from cache or default)
+  const [userLocation, setUserLocation] = useState<Coordinates>(() => {
+    const saved = getSavedUserLocation();
+    return saved ? saved.coords : { lat: 37.7749, lng: -122.4194 };
   });
-  const [userAddress, setUserAddress] = useState<string>('San Francisco Metro Area');
-  const [isGpsLocked, setIsGpsLocked] = useState<boolean>(false);
+  const [userAddress, setUserAddress] = useState<string>(() => {
+    const saved = getSavedUserLocation();
+    return saved ? saved.address : 'Detecting live location...';
+  });
+  const [isGpsLocked, setIsGpsLocked] = useState<boolean>(() => {
+    const saved = getSavedUserLocation();
+    return !!saved?.isExactGps;
+  });
   const [isLocating, setIsLocating] = useState<boolean>(false);
-  const [gpsAccuracyMeters, setGpsAccuracyMeters] = useState<number | null>(null);
+  const [gpsAccuracyMeters, setGpsAccuracyMeters] = useState<number | null>(() => {
+    const saved = getSavedUserLocation();
+    return saved ? saved.accuracyMeters : null;
+  });
+  const [locationSourceLabel, setLocationSourceLabel] = useState<string>(() => {
+    const saved = getSavedUserLocation();
+    return saved ? 'Saved Area' : 'Detecting...';
+  });
 
   // Core Data Collections (Initialized strictly to real-time streams)
   const [disasterAlerts, setDisasterAlerts] = useState<DisasterAlert[]>([]);
@@ -124,6 +143,8 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearchingCity, setIsSearchingCity] = useState(false);
+  const [customLatInput, setCustomLatInput] = useState('');
+  const [customLngInput, setCustomLngInput] = useState('');
 
   // Map Filter State
   const [mapFilters, setMapFilters] = useState({
@@ -229,41 +250,31 @@ export default function App() {
     refreshLocalZoneData(userLocation, userAddress);
   }, [userLocation, fetchLiveDisasters, refreshLocalZoneData]);
 
-  // Live Geolocation detection handler
+  // Live Geolocation detection handler using multi-tier resolver
   const detectLiveLocation = useCallback(async () => {
-    if (!('geolocation' in navigator)) {
-      console.warn('Geolocation is not supported by your browser.');
-      return;
-    }
-
     setIsLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const coords: Coordinates = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        };
-        setUserLocation(coords);
-        setIsGpsLocked(true);
-        setGpsAccuracyMeters(Math.round(pos.coords.accuracy));
-        setIsLocating(false);
+    try {
+      const result = await detectRealLocation();
+      setUserLocation(result.coords);
+      setUserAddress(result.address);
+      setIsGpsLocked(result.isExactGps);
+      setGpsAccuracyMeters(result.accuracyMeters);
 
-        // Reverse geocode to get friendly street / neighborhood name
-        const resolvedAddress = await reverseGeocode(coords.lat, coords.lng);
-        setUserAddress(resolvedAddress);
-        refreshLocalZoneData(coords, resolvedAddress);
-      },
-      (err) => {
-        console.warn('Geolocation error or permission denied:', err.message);
-        setIsLocating(false);
-        setIsGpsLocked(false);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 30000,
-      }
-    );
+      const labelMap: Record<string, string> = {
+        gps_high: 'High-Precision GPS',
+        gps_network: 'Network Geolocation',
+        ip_browser: 'Browser IP Location',
+        ip_server: 'Server Geo Location',
+        saved_cache: 'Saved Location',
+      };
+      setLocationSourceLabel(labelMap[result.source] || 'Auto-Detected');
+
+      refreshLocalZoneData(result.coords, result.address);
+    } catch (err) {
+      console.warn('Geolocation detection error:', err);
+    } finally {
+      setIsLocating(false);
+    }
   }, [refreshLocalZoneData]);
 
   // Initial GPS Lock on mount
@@ -293,15 +304,31 @@ export default function App() {
   };
 
   // Set Manual Preset or Searched Location
-  const handleSelectPresetLocation = async (loc: { name: string; lat: number; lng: number; country?: string }) => {
-    const formattedName = loc.country ? `${loc.name}, ${loc.country}` : loc.name;
-    setUserLocation({ lat: loc.lat, lng: loc.lng });
+  const handleSelectPresetLocation = async (loc: { name: string; lat: number; lng: number; country?: string; admin1?: string }) => {
+    const formattedName = [loc.name, loc.admin1, loc.country].filter(Boolean).join(', ');
+    const coords = { lat: loc.lat, lng: loc.lng };
+    setUserLocation(coords);
     setUserAddress(formattedName);
     setIsGpsLocked(true);
+    setGpsAccuracyMeters(50);
+    setLocationSourceLabel('User Selected');
+    saveUserLocationToCache(coords, formattedName, 50);
     setIsLocationSelectorOpen(false);
     setSearchQuery('');
     setSearchResults([]);
-    refreshLocalZoneData({ lat: loc.lat, lng: loc.lng }, formattedName);
+    refreshLocalZoneData(coords, formattedName);
+  };
+
+  // Set Direct Coordinates (from map click or manual Lat/Lng entry)
+  const handleSetCustomCoordinates = async (coords: Coordinates, customName?: string) => {
+    const resolvedName = customName || (await reverseGeocode(coords.lat, coords.lng));
+    setUserLocation(coords);
+    setUserAddress(resolvedName);
+    setIsGpsLocked(true);
+    setGpsAccuracyMeters(30);
+    setLocationSourceLabel('Point Picked');
+    saveUserLocationToCache(coords, resolvedName, 30);
+    refreshLocalZoneData(coords, resolvedName);
   };
 
   // Broadcast 5km Signal Handler
@@ -851,6 +878,8 @@ export default function App() {
               userAddress={userAddress}
               activeSignal={activeSignal}
               onOpenBroadcastModal={() => setIsBroadcastModalOpen(true)}
+              onUpdateUserLocation={handleSetCustomCoordinates}
+              onTriggerGPS={detectLiveLocation}
               filters={mapFilters}
               onToggleFilter={(key) =>
                 setMapFilters((prev) => ({ ...prev, [key]: !prev[key as keyof typeof prev] }))
@@ -945,6 +974,7 @@ export default function App() {
             onOfferVolunteer={handleOfferVolunteer}
             onPledgeHelp={handlePledgeHelp}
             onBackToMap={() => setActiveTab('map')}
+            onOpenWildfireModule={() => setActiveTab('forest_fire')}
           />
         )}
 
@@ -964,11 +994,14 @@ export default function App() {
       {/* Location Selector Modal */}
       {isLocationSelectorOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xl flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-[#050810]/95 backdrop-blur-2xl border border-white/20 rounded-3xl p-6 shadow-2xl space-y-4 animate-fadeIn">
+          <div className="w-full max-w-md bg-[#050810]/95 backdrop-blur-2xl border border-white/20 rounded-3xl p-6 shadow-2xl space-y-4 animate-fadeIn max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-bold text-white text-base">Select Your Active Area</h3>
+                <div>
+                  <h3 className="font-bold text-white text-base">Select Your Active Area</h3>
+                  <p className="text-[10px] text-emerald-400 font-mono">Current: {locationSourceLabel} • {userAddress}</p>
+                </div>
               </div>
               <button
                 onClick={() => setIsLocationSelectorOpen(false)}
@@ -978,14 +1011,22 @@ export default function App() {
               </button>
             </div>
 
-            <p className="text-xs text-slate-300">
-              CivicRelief connects to real live weather feeds, global crisis telemetry (USGS, NOAA, ReliefWeb), and coordinates a 5km civilian defense mesh.
-            </p>
+            <button
+              onClick={() => {
+                detectLiveLocation();
+                setIsLocationSelectorOpen(false);
+              }}
+              disabled={isLocating}
+              className="w-full py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all"
+            >
+              <Compass className={`w-4 h-4 ${isLocating ? 'animate-spin' : ''}`} />
+              <span>{isLocating ? 'Locking Real GPS Coordinates...' : 'Detect Real Live GPS Coordinates'}</span>
+            </button>
 
             {/* City Search Bar */}
-            <div className="space-y-2">
+            <div className="space-y-2 pt-1">
               <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                Search Any City Worldwide:
+                Search Any City or Neighborhood:
               </label>
               <div className="relative">
                 <input
@@ -1022,21 +1063,54 @@ export default function App() {
               )}
             </div>
 
-            <button
-              onClick={() => {
-                detectLiveLocation();
-                setIsLocationSelectorOpen(false);
-              }}
-              className="w-full py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all"
-            >
-              <Compass className="w-4 h-4" /> Use My Exact Live GPS Location
-            </button>
+            {/* Direct Coordinates Entry (For exact GPS coords) */}
+            <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                <span>Enter Exact Coordinates:</span>
+                <span className="text-[9px] text-slate-500 lowercase font-normal">lat, lng decimal format</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="number"
+                  step="any"
+                  value={customLatInput}
+                  onChange={(e) => setCustomLatInput(e.target.value)}
+                  placeholder={`Lat (e.g. ${userLocation.lat.toFixed(4)})`}
+                  className="w-full px-3 py-2 rounded-xl bg-white/[0.06] border border-white/15 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-emerald-400 font-mono"
+                />
+                <input
+                  type="number"
+                  step="any"
+                  value={customLngInput}
+                  onChange={(e) => setCustomLngInput(e.target.value)}
+                  placeholder={`Lng (e.g. ${userLocation.lng.toFixed(4)})`}
+                  className="w-full px-3 py-2 rounded-xl bg-white/[0.06] border border-white/15 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-emerald-400 font-mono"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const latNum = parseFloat(customLatInput);
+                  const lngNum = parseFloat(customLngInput);
+                  if (Number.isFinite(latNum) && Number.isFinite(lngNum) && latNum >= -90 && latNum <= 90 && lngNum >= -180 && lngNum <= 180) {
+                    handleSetCustomCoordinates({ lat: latNum, lng: lngNum });
+                    setIsLocationSelectorOpen(false);
+                    setCustomLatInput('');
+                    setCustomLngInput('');
+                  }
+                }}
+                disabled={!customLatInput || !customLngInput}
+                className="w-full py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-bold text-xs transition-all shadow-md"
+              >
+                Apply Custom Coordinates
+              </button>
+            </div>
 
-            <div className="space-y-2 pt-2">
+            <div className="space-y-2 pt-1">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                 Or Quick Switch to Major Zones:
               </span>
-              <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+              <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                 {presetLocations.map((p, idx) => (
                   <button
                     key={idx}
@@ -1114,7 +1188,7 @@ export default function App() {
             <span>• 5km Real Emergency Broadcast Network</span>
           </div>
           <p className="text-[11px] text-slate-500">
-            Real GPS coordinate locking • 5km Civic Radar • Call 911 for direct life-threatening emergencies.
+            Real GPS coordinate locking • 5km Civic Radar • Call 100 / 112 for direct emergency response.
           </p>
         </div>
       </footer>

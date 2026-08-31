@@ -309,7 +309,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                       type="tel"
                       value={phoneNumber}
                       onChange={(e) => setPhoneNumber(e.target.value)}
-                      placeholder="e.g. 9317230299"
+                      placeholder="e.g. +1 (800) 555-0199"
                       className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:border-blue-500"
                     />
                   </div>

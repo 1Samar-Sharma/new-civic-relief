@@ -16,6 +16,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { DisasterAlert } from '../../types';
+import { DisasterActivityTrendChart } from './DisasterActivityTrendChart';
 
 interface EarlyWarningModuleProps {
   alerts: DisasterAlert[];
@@ -408,6 +409,9 @@ export const EarlyWarningModule: React.FC<EarlyWarningModuleProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 30-Day Disaster Activity Trend Chart (Recharts) */}
+      <DisasterActivityTrendChart alerts={alerts} />
 
       {/* Live Verified Disaster Alerts Feed (USGS, NOAA, ReliefWeb) */}
       <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl space-y-4">

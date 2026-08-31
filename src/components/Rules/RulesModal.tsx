@@ -12,7 +12,7 @@ import {
   Mail,
   ShieldCheck,
 } from 'lucide-react';
-import { MASTER_ADMIN_EMAIL, MASTER_ADMIN_NAME, MASTER_ADMIN_PHONE } from '../../lib/firebase';
+import { PUBLIC_COMMAND_NAME, PUBLIC_HELPLINE_EMAIL, PUBLIC_HELPLINE_PHONE } from '../../lib/firebase';
 
 interface RulesModalProps {
   isOpen: boolean;
@@ -85,7 +85,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
                 <h4 className="font-bold text-white text-xs">1. Author & Admin Resolution Only</h4>
               </div>
               <p className="text-[11px] text-slate-300 leading-relaxed">
-                Only the person who originally posted an emergency, SOS beacon, or help request—or designated Master Administrator <strong>{MASTER_ADMIN_NAME}</strong> ({MASTER_ADMIN_PHONE}) / authorized admins—can mark it safe or close it. No random user can tamper with someone else's incident.
+                Only the person who originally posted an emergency, SOS beacon, or help request—or designated {PUBLIC_COMMAND_NAME} / authorized system admins—can mark it safe or close it. No random user can tamper with someone else's incident.
               </p>
             </div>
 
@@ -124,25 +124,25 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
 
-        {/* Master Administrator Contact Details Card */}
+        {/* Emergency Control Desk & Helpline Card */}
         <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
           <div>
             <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
-              Designated Master Administrator:
+              Emergency Response & Support Desk:
             </span>
-            <p className="font-bold text-white text-sm">{MASTER_ADMIN_NAME}</p>
+            <p className="font-bold text-white text-sm">{PUBLIC_COMMAND_NAME}</p>
             <p className="text-[11px] text-slate-400 flex items-center gap-3 mt-0.5">
               <span className="flex items-center gap-1">
-                <Mail className="w-3 h-3 text-red-400" /> {MASTER_ADMIN_EMAIL}
+                <Mail className="w-3 h-3 text-red-400" /> {PUBLIC_HELPLINE_EMAIL}
               </span>
               <span className="flex items-center gap-1">
-                <Phone className="w-3 h-3 text-emerald-400" /> {MASTER_ADMIN_PHONE}
+                <Phone className="w-3 h-3 text-emerald-400" /> {PUBLIC_HELPLINE_PHONE}
               </span>
             </p>
           </div>
 
           <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-semibold">
-            Authority: Global Resolution & Admin Appointment
+            Universal 24/7 Crisis Helpline & Coordination
           </div>
         </div>
 

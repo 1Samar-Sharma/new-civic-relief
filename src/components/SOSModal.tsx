@@ -118,10 +118,10 @@ export const SOSModal: React.FC<SOSModalProps> = ({
           </button>
 
           <a
-            href="tel:911"
+            href="tel:100"
             className="py-3.5 rounded-2xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/40 font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-rose-500/10 transition-all"
           >
-            <Phone className="w-5 h-5 text-rose-400" /> CALL 911 DIRECT
+            <Phone className="w-5 h-5 text-rose-400" /> CALL 100 DIRECT
           </a>
         </div>
 

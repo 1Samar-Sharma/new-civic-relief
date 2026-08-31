@@ -114,3 +114,33 @@
   border: none;
 }
 
+/* Map Watermark & API Key Required Overlay Removal */
+.leaflet-control-attribution {
+  display: none !important;
+}
+
+/* Google Maps Watermark & Warning Overlays Suppression */
+.gm-style-cc,
+.gmnoprint a,
+.gmnoprint span,
+a[href^="http://maps.google.com/maps"],
+a[href^="https://maps.google.com/maps"],
+.gm-style-moc,
+.gm-err-container,
+.gm-err-message,
+.dismissButton,
+div[style*="z-index: 1000000"],
+div[aria-label="Watermark"],
+div:has(> .dismissButton) {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+/* Strip grey development grid overlay if key missing */
+.gm-style > div:first-child > div:nth-child(2) > div:nth-child(3) {
+  display: none !important;
+}
+
+

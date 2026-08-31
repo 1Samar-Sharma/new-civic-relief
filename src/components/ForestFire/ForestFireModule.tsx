@@ -44,7 +44,7 @@ export const ForestFireModule: React.FC<ForestFireModuleProps> = ({
   const primaryFire = fireAlerts[0];
 
   const [reportTitle, setReportTitle] = useState('');
-  const [reportLocation, setReportLocation] = useState('East Ridge Switchback (near trail 4)');
+  const [reportLocation, setReportLocation] = useState('');
   const [reportDesc, setReportDesc] = useState('');
   const [smokeDensity, setSmokeDensity] = useState<'light' | 'moderate' | 'heavy_black'>('moderate');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -58,7 +58,7 @@ export const ForestFireModule: React.FC<ForestFireModuleProps> = ({
     try {
       const res = await onAnalyzeWithAI(
         reportTitle || 'Forest Fire Smoke Spotting',
-        reportDesc || `Smoke density observed: ${smokeDensity} at ${reportLocation}`
+        reportDesc || `Smoke density observed: ${smokeDensity} at ${reportLocation || 'current location'}`
       );
       setAiAnalysis(res);
     } catch (e) {
@@ -75,15 +75,16 @@ export const ForestFireModule: React.FC<ForestFireModuleProps> = ({
 
     onSubmitFireReport({
       title: reportTitle,
-      locationName: reportLocation,
+      locationName: reportLocation || 'Spotting near user coordinates',
       description: reportDesc,
       smokeDensity,
-      lat: userLocation.lat + (Math.random() * 0.008 - 0.004),
-      lng: userLocation.lng + (Math.random() * 0.008 - 0.004),
+      lat: userLocation.lat,
+      lng: userLocation.lng,
     });
 
     setSuccessMsg('🔥 Flare-up report dispatched to neighborhood fire teams & watch drone!');
     setReportTitle('');
+    setReportLocation('');
     setReportDesc('');
     setAiAnalysis(null);
     setIsSubmitting(false);
