@@ -37,7 +37,7 @@ interface AuthContextType {
   signupWithEmail: (email: string, pass: string, name: string, phone?: string, role?: string) => Promise<void>;
   sendPhoneOtp: (phoneNumber: string) => Promise<{ success: boolean; codePreview?: string; message: string; formattedPhone?: string }>;
   loginWithPhoneOtp: (phoneNumber: string, code: string, userDetails?: { displayName?: string; role?: string; bloodGroup?: string; emergencyContactName?: string; emergencyContactPhone?: string }) => Promise<void>;
-  quickDemoLogin: (type: 'samar_admin' | 'resident' | 'volunteer' | 'medical' | 'guest') => void;
+  quickDemoLogin: (type: 'resident' | 'volunteer' | 'medical' | 'guest') => void;
   updateUserProfile: (updates: Partial<AuthUser> & { newPassword?: string }) => Promise<void>;
   logout: () => Promise<void>;
   addNewAdmin: (admin: { name: string; email: string; phone: string; password?: string }) => Promise<void>;
@@ -60,7 +60,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const MASTER_ADMIN_USER: AuthUser = {
-  uid: 'master-samar-sharma-uid',
+  uid: 'master-admin-uid',
   email: MASTER_ADMIN_EMAIL,
   displayName: MASTER_ADMIN_NAME,
   phoneNumber: MASTER_ADMIN_PHONE,
@@ -129,7 +129,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState<boolean>(true);
   const [adminList, setAdminList] = useState<SystemAdmin[]>([
     {
-      id: 'master-samar-sharma',
+      id: 'master-admin',
       name: MASTER_ADMIN_NAME,
       email: MASTER_ADMIN_EMAIL,
       phone: MASTER_ADMIN_PHONE,
@@ -237,58 +237,82 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
-   * Google Sign In Flow (With iframe / sandbox popup fallback)
+   * Google Sign In Flow (Direct Firebase Authentication with Pop-Up & Account Selection)
    */
-  const loginWithGoogle = async (presetEmail?: string) => {
+  const loginWithGoogle = async (inputEmail?: string) => {
     try {
-      // If a preset email is provided or in restricted environment, try popup first
       let res: any = null;
       try {
         res = await signInWithPopup(auth, googleProvider);
       } catch (popupErr: any) {
-        console.warn('Firebase popup sign-in encountered error, checking fallback mode:', popupErr?.code);
-        // If popup was blocked or unauthorized domain in preview iframe
+        console.warn('Firebase popup sign-in encountered error:', popupErr?.code, popupErr?.message);
+
+        // If user cancelled the popup
+        if (popupErr.code === 'auth/popup-closed-by-user') {
+          throw new Error('Google Sign-In was cancelled by user.');
+        }
+
+        // If popup was blocked by browser
+        if (popupErr.code === 'auth/popup-blocked') {
+          throw new Error(
+            'Pop-up window was blocked by your browser. Please allow popups for this site, or sign in using your Email & Password.'
+          );
+        }
+
+        // If unauthorized domain or iframe sandbox restriction in preview mode
         if (
-          popupErr.code === 'auth/popup-blocked' ||
           popupErr.code === 'auth/unauthorized-domain' ||
-          popupErr.code === 'auth/cancelled-popup-request' ||
           popupErr.code === 'auth/operation-not-supported-in-this-environment' ||
+          popupErr.code === 'auth/cancelled-popup-request' ||
           !res
         ) {
-          const emailToUse = presetEmail || MASTER_ADMIN_EMAIL;
-          const isMaster = emailToUse.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
-          const isInAdminList = adminList.some((a) => a.email.toLowerCase() === emailToUse.toLowerCase());
+          // If a specific email was provided in the input field
+          if (inputEmail && inputEmail.trim()) {
+            const cleanEmail = inputEmail.trim().toLowerCase();
+            // NEVER grant master admin through fallback without password or verified token
+            const isMaster = false;
+            const isInAdminList = false;
 
-          const fallbackUser: AuthUser = isMaster
-            ? { ...MASTER_ADMIN_USER }
-            : {
-                uid: `google_verified_${Date.now()}`,
-                email: emailToUse,
-                displayName: isMaster ? MASTER_ADMIN_NAME : emailToUse.split('@')[0],
-                phoneNumber: isMaster ? MASTER_ADMIN_PHONE : undefined,
-                isAdmin: isMaster || isInAdminList,
-                isMasterAdmin: isMaster,
-                role: isMaster ? 'coordinator' : 'resident',
-                joinedAt: 'Google Verified Responder',
-                verifiedEmail: true,
-                bloodGroup: 'O+',
-              };
+            let existingProfile = await getUserProfileDoc(`google_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`);
+            if (!existingProfile) {
+              existingProfile = findLocalUser(cleanEmail);
+            }
 
-          saveLocalUser({ ...fallbackUser });
-          try {
-            await saveUserProfileDoc(fallbackUser.uid, fallbackUser);
-          } catch (e) {}
+            const fallbackUser: AuthUser = {
+              uid: existingProfile?.uid || `google_verified_${Date.now()}`,
+              email: cleanEmail,
+              displayName: existingProfile?.displayName || cleanEmail.split('@')[0],
+              phoneNumber: existingProfile?.phoneNumber || undefined,
+              isAdmin: false,
+              isMasterAdmin: false,
+              role: existingProfile?.role || 'resident',
+              joinedAt: existingProfile?.joinedAt || 'Google Civilian Member',
+              verifiedEmail: true,
+              bloodGroup: existingProfile?.bloodGroup || 'O+',
+            };
 
-          setCurrentUser(fallbackUser);
-          localStorage.setItem('civic_user_session', JSON.stringify(fallbackUser));
-          setIsAuthModalOpen(false);
-          return;
+            saveLocalUser({ ...fallbackUser });
+            try {
+              await saveUserProfileDoc(fallbackUser.uid, fallbackUser);
+            } catch (e) {}
+
+            setCurrentUser(fallbackUser);
+            localStorage.setItem('civic_user_session', JSON.stringify(fallbackUser));
+            setIsAuthModalOpen(false);
+            return;
+          } else {
+            throw new Error(
+              `Google Sign-In popup could not complete (${popupErr.code || 'Domain restriction'}). Please sign in with your Email and Password below.`
+            );
+          }
         }
+
         throw popupErr;
       }
 
       if (res && res.user) {
         const userEmail = (res.user.email || '').toLowerCase();
+        // ONLY grant master admin if Google verified the exact master email address
         const isMaster = userEmail === MASTER_ADMIN_EMAIL.toLowerCase();
         const isInAdminList = adminList.some((a) => a.email.toLowerCase() === userEmail);
 
@@ -300,10 +324,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const userObj: AuthUser = {
           uid: res.user.uid,
-          email: res.user.email || '',
+          email: res.user.email || userEmail,
           displayName: isMaster
             ? MASTER_ADMIN_NAME
-            : (existingProfile?.displayName || res.user.displayName || res.user.email?.split('@')[0] || 'Civilian'),
+            : (existingProfile?.displayName || res.user.displayName || userEmail.split('@')[0] || 'Civilian'),
           phoneNumber: isMaster
             ? MASTER_ADMIN_PHONE
             : (existingProfile?.phoneNumber || res.user.phoneNumber || undefined),
@@ -337,7 +361,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err: any) {
       console.error('Google Sign In Error:', err);
       if (err.code === 'auth/popup-closed-by-user') {
-        throw new Error('Google Sign-In was cancelled.');
+        throw new Error('Google Sign-In was cancelled by user.');
       } else {
         throw new Error(err.message || 'Google Sign-In verification could not be completed.');
       }
@@ -355,9 +379,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Please enter both your email and password.');
     }
 
-    // 1. Check Master Admin Credentials (Samar Sharma)
+    // 1. Check Master Admin Credentials
     if (cleanEmail === MASTER_ADMIN_EMAIL.toLowerCase()) {
-      // Allow master password, or if samar sharma is signing in
+      // Must match master password
+      if (cleanPass !== MASTER_ADMIN_PASSWORD) {
+        throw new Error('Incorrect password for Master Administrator account. Access denied.');
+      }
+
       const masterUser: AuthUser = {
         ...MASTER_ADMIN_USER,
       };
@@ -718,7 +746,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Verification code could not be confirmed.');
     }
 
-    // Step 2: Check if this phone number belongs to Master Admin (Samar Sharma)
+    // Step 2: Check if this phone number belongs to Master Admin
     const digits = rawPhone.replace(/[^\d]/g, '');
     const masterDigits = MASTER_ADMIN_PHONE.replace(/[^\d]/g, '');
     const isMaster = digits.endsWith(masterDigits) || masterDigits.endsWith(digits);
@@ -882,11 +910,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('civic_user_session', JSON.stringify(updatedUser));
   };
 
-  const quickDemoLogin = (type: 'samar_admin' | 'resident' | 'volunteer' | 'medical' | 'guest') => {
+  const quickDemoLogin = (type: 'resident' | 'volunteer' | 'medical' | 'guest') => {
     let userObj: AuthUser;
-    if (type === 'samar_admin') {
-      userObj = { ...MASTER_ADMIN_USER };
-    } else if (type === 'volunteer') {
+    if (type === 'volunteer') {
       userObj = {
         uid: 'vol-marcus-chen-01',
         email: 'marcus.chen.guardian@civicrelief.org',

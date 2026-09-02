@@ -292,7 +292,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                       required
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="e.g. Samar Sharma"
+                      placeholder="e.g. Alex Morgan / Resident"
                       className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:border-blue-500"
                     />
                   </div>

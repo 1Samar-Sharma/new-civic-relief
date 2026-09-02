@@ -31,7 +31,7 @@ import type { HelpRequest, VolunteerOffer, CommunityReport, DisasterAlert, Women
 
 // Master Admin Configuration
 export const MASTER_ADMIN_EMAIL = 'sansamar2006@gmail.com';
-export const MASTER_ADMIN_NAME = 'Samar Sharma';
+export const MASTER_ADMIN_NAME = 'Master Administrator';
 export const MASTER_ADMIN_PHONE = '9317230299';
 export const MASTER_ADMIN_PASSWORD = 'chinchintu2000@#';
 
@@ -70,6 +70,11 @@ try {
 export const db = firestoreInstance;
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('email');
+googleProvider.addScope('profile');
+googleProvider.setCustomParameters({
+  prompt: 'select_account',
+});
 
 // Collection references
 const HELP_REQUESTS_COLLECTION = 'help_requests';
@@ -93,7 +98,7 @@ class RealtimeSyncManager {
   private communityReports: CommunityReport[] = [];
   private systemAdmins: SystemAdmin[] = [
     {
-      id: 'master-samar-sharma',
+      id: 'master-admin',
       name: MASTER_ADMIN_NAME,
       email: MASTER_ADMIN_EMAIL,
       phone: MASTER_ADMIN_PHONE,
@@ -434,7 +439,7 @@ export function subscribeSystemAdmins(onData: (admins: SystemAdmin[]) => void, o
         );
         if (!hasMaster) {
           items.push({
-            id: 'master-samar-sharma',
+            id: 'master-admin',
             name: MASTER_ADMIN_NAME,
             email: MASTER_ADMIN_EMAIL,
             phone: MASTER_ADMIN_PHONE,
@@ -456,7 +461,7 @@ export function subscribeSystemAdmins(onData: (admins: SystemAdmin[]) => void, o
             phone: data.phone || (isMaster ? MASTER_ADMIN_PHONE : ''),
             role: isMaster ? 'master_admin' : 'appointed_admin',
             password: isMaster ? MASTER_ADMIN_PASSWORD : (data.password || 'admin123'),
-            addedBy: data.addedBy || 'Samar Sharma',
+            addedBy: data.addedBy || 'Master Administrator',
             addedAt: data.addedAt || 'Active',
           });
         });
@@ -531,7 +536,7 @@ export async function updateSystemAdminPasswordDoc(adminEmail: string, newPasswo
  */
 export async function removeSystemAdminDoc(adminEmail: string) {
   if (adminEmail.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase()) {
-    throw new Error('Master Administrator Samar Sharma cannot be revoked.');
+    throw new Error('Master Administrator cannot be revoked.');
   }
   const sanitizedId = adminEmail.toLowerCase().replace(/[^a-z0-9]/g, '_');
   try {

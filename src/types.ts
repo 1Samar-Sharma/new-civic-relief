@@ -291,6 +291,10 @@ export interface WeatherChatMessage {
   sender: 'user' | 'assistant';
   text: string;
   timestamp: string;
+  personaUsed?: 'general' | 'farmer' | 'fisherman' | 'commuter' | 'trekker' | 'sdma' | 'rural';
+  language?: string;
+  voiceNoteDuration?: string;
+  waveHeightM?: number;
   isWeatherAlert?: boolean;
   structuredHazard?: {
     hazardType: WeatherHazardType;

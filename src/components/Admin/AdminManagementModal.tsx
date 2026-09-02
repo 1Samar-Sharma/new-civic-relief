@@ -144,7 +144,7 @@ export const AdminManagementModal: React.FC<AdminManagementModalProps> = ({
     if (admin.email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase()) {
       setFeedback({
         type: 'error',
-        message: 'Master Administrator Samar Sharma cannot be removed.',
+        message: 'Master Administrator cannot be removed.',
       });
       return;
     }
@@ -375,7 +375,7 @@ export const AdminManagementModal: React.FC<AdminManagementModalProps> = ({
                         <span className="font-bold text-white">{admin.name}</span>
                         {isMaster ? (
                           <span className="px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[9px] font-black uppercase">
-                            Master Admin (Samar Sharma)
+                            Master Admin (System Lead)
                           </span>
                         ) : (
                           <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/40 text-[9px] font-bold uppercase">

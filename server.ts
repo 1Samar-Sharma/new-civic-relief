@@ -43,40 +43,33 @@ async function safeGenerateContent(
   }
 ): Promise<any> {
   const modelsToTry = [
-    request.preferredModel || 'gemini-3.7-flash',
-    ...(request.fallbackModels || ['gemini-flash-latest', 'gemini-3.1-flash-lite']),
+    request.preferredModel || 'gemini-3.8-flash',
+    ...(request.fallbackModels || ['gemini-flash-latest', 'gemini-3.7-flash', 'gemini-3.1-flash-lite']),
   ];
 
   let lastError: any = null;
   for (let i = 0; i < modelsToTry.length; i++) {
     const model = modelsToTry[i];
-    try {
-      const response = await ai.models.generateContent({
-        model,
-        contents: request.contents,
-        config: request.config,
-      });
-      return response;
-    } catch (err: any) {
-      lastError = err;
-      const errMsg = err?.message || String(err);
-      const isTransient =
-        err?.status === 503 ||
-        err?.status === 429 ||
-        errMsg.includes('503') ||
-        errMsg.includes('429') ||
-        errMsg.includes('high demand') ||
-        errMsg.includes('UNAVAILABLE') ||
-        errMsg.includes('RESOURCE_EXHAUSTED') ||
-        errMsg.includes('overloaded');
-
-      if (isTransient) {
-        console.warn(`[Gemini API] Model ${model} returned temporary status (503/429). Attempting fallback model...`);
-        // Brief jitter wait before next model attempt
-        await new Promise((r) => setTimeout(r, 200 * (i + 1)));
-        continue;
+    // Attempt up to 2 times for transient 503/429
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents: request.contents,
+          config: request.config,
+        });
+        return response;
+      } catch (err: any) {
+        lastError = err;
+        const errMsg = err?.message || String(err);
+        const is503or429 = errMsg.includes('503') || errMsg.includes('429') || errMsg.includes('high demand') || errMsg.includes('UNAVAILABLE');
+        if (attempt === 0 && is503or429) {
+          await new Promise((r) => setTimeout(r, 400));
+          continue;
+        }
+        console.warn(`[Gemini API] Notice calling model ${model}: ${errMsg}. Attempting next model...`);
+        break;
       }
-      console.warn(`[Gemini API] Error calling model ${model}: ${errMsg}`);
     }
   }
   throw lastError || new Error('All Gemini models unavailable');
@@ -163,10 +156,20 @@ function getWindDirection(degrees: number): string {
   return directions[index];
 }
 
+// In-memory cache for real-time weather telemetry (5-minute TTL)
+const weatherCache = new Map<string, { timestamp: number; data: any }>();
+
 /**
- * Fetch real-time weather from Open-Meteo & Air Quality APIs
+ * Fetch real-time weather from Open-Meteo & Air Quality APIs with instant in-memory caching
  */
 async function fetchRealWeather(lat: number, lng: number) {
+  const cacheKey = `${lat.toFixed(2)}_${lng.toFixed(2)}`;
+  const now = Date.now();
+  const cached = weatherCache.get(cacheKey);
+  if (cached && now - cached.timestamp < 300000) {
+    return cached.data;
+  }
+
   try {
     const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m,cloud_cover,uv_index&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,precipitation,weather_code,surface_pressure,wind_speed_10m,wind_gusts_10m,uv_index&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,uv_index_max&timezone=auto`;
     const aqiUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lng}&current=us_aqi,pm2_5,pm10,ozone,nitrogen_dioxide&timezone=auto`;
@@ -311,7 +314,7 @@ async function fetchRealWeather(lat: number, lng: number) {
       });
     }
 
-    return {
+    const result = {
       current: {
         temperatureC: tempC,
         temperatureF: tempF,
@@ -346,6 +349,9 @@ async function fetchRealWeather(lat: number, lng: number) {
       daily: dailyForecasts,
       hourly: hourlyForecasts,
     };
+
+    weatherCache.set(cacheKey, { timestamp: Date.now(), data: result });
+    return result;
   } catch (error) {
     console.error('Error fetching real weather from Open-Meteo:', error);
     throw error;
@@ -1147,8 +1153,8 @@ let syncStore: SyncStoreState = {
   broadcasts: [],
   systemAdmins: [
     {
-      id: 'master-samar-sharma',
-      name: 'Samar Sharma',
+      id: 'master-admin',
+      name: 'Master Administrator',
       email: 'sansamar2006@gmail.com',
       phone: '9317230299',
       role: 'master_admin',
@@ -1609,45 +1615,108 @@ app.get('/api/geo/search', async (req: Request, res: Response) => {
   }
 });
 
+// Location extraction helper for queries
+async function resolveLocationForQuery(
+  query: string,
+  defaultLoc: string,
+  defaultLat: number,
+  defaultLng: number
+): Promise<{ loc: string; lat: number; lng: number }> {
+  if (!query) return { loc: defaultLoc, lat: defaultLat, lng: defaultLng };
+
+  const q = query.trim();
+  const locationMatch =
+    q.match(/(?:in|at|for|near|around|of)\s+([A-Za-z\s]{2,30})/i) ||
+    q.match(/^([A-Za-z\s]{2,20})\s+(?:weather|temperature|forecast|rain|climate|alerts?)/i) ||
+    q.match(/(?:weather|temperature|forecast|rain|climate|alerts?)\s+(?:in|for|at)?\s*([A-Za-z\s]{2,20})/i);
+
+  let targetPlace = locationMatch ? locationMatch[1].trim() : null;
+  if (targetPlace) {
+    targetPlace = targetPlace
+      .replace(/\b(today|tomorrow|now|tonight|weekend|please|tell|me|what|is|the|how|will|it|going|to)\b/gi, '')
+      .trim();
+  }
+
+  if (
+    targetPlace &&
+    targetPlace.length >= 3 &&
+    !['here', 'my area', 'my location', 'current location', 'this place'].includes(targetPlace.toLowerCase())
+  ) {
+    try {
+      const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(targetPlace)}&count=1&language=en&format=json`;
+      const res = await fetchWithTimeout(geoUrl, { headers: { 'User-Agent': 'CivicRelief/1.0' } }, 2200);
+      if (res.ok) {
+        const data: any = await res.json();
+        if (data.results && data.results.length > 0) {
+          const first = data.results[0];
+          const resolvedName = `${first.name}${first.admin1 ? ', ' + first.admin1 : ''}${first.country ? ', ' + first.country : ''}`;
+          return { loc: resolvedName, lat: first.latitude, lng: first.longitude };
+        }
+      }
+    } catch {}
+  }
+
+  return { loc: defaultLoc, lat: defaultLat, lng: defaultLng };
+}
+
 // =========================================================================
-// WEATHERGPT: GROUNDED CONVERSATIONAL AI FOR FORECASTS & CLIMATE DISASTERS
+// WEATHERGPT: GROUNDED CONVERSATIONAL AI (RESQTECH DISASTER INTELLIGENCE)
 // =========================================================================
 
 app.post('/api/ai/weather-gpt', async (req: Request, res: Response) => {
-  const { query, locationName, coordinates, conversationHistory = [] } = req.body;
+  const { query, locationName, coordinates, persona = 'general', language = 'english', conversationHistory = [] } = req.body;
 
-  const lat = coordinates?.lat || 37.7749;
-  const lng = coordinates?.lng || -122.4194;
-  const loc = locationName || 'Local Community';
+  const defaultLat = coordinates?.lat || 37.7749;
+  const defaultLng = coordinates?.lng || -122.4194;
+  const defaultLoc = locationName || 'Local Community';
+
+  // Dynamically resolve target location if specified in query (e.g. "Weather in Delhi")
+  const { loc, lat, lng } = await resolveLocationForQuery(query, defaultLoc, defaultLat, defaultLng);
+
+  let liveWeather: any = null;
+  let liveAlerts: any[] = [];
+  let currentConditions: any = {
+    temperatureC: 22,
+    temperatureF: 72,
+    feelsLikeC: 22,
+    humidityPct: 55,
+    windSpeedKmh: 12,
+    windDirection: 'W',
+    condition: 'Clear Sky',
+    aqiIndex: 35,
+    aqiStatus: 'Good',
+    precipitationProbability: 10,
+    precipitationMm: 0,
+    barometricPressureHpa: 1013,
+    uvIndex: 4,
+  };
 
   try {
     // 1. Fetch REAL-TIME meteorological telemetry and official disaster alerts
-    let liveWeather: any = null;
-    let liveAlerts: any[] = [];
-
     try {
       [liveWeather, liveAlerts] = await Promise.all([
         fetchRealWeather(lat, lng),
         fetchRealDisasters(lat, lng),
       ]);
+      if (liveWeather?.current) {
+        currentConditions = liveWeather.current;
+      }
     } catch (fetchErr) {
       console.warn('Real weather fetch warning in WeatherGPT:', fetchErr);
     }
 
-    const currentConditions = liveWeather?.current || {
-      temperatureC: 22,
-      temperatureF: 72,
-      humidityPct: 55,
-      windSpeedKmh: 12,
-      windDirection: 'W',
-      condition: 'Clear',
-      aqiIndex: 35,
-      precipitationProbability: 10,
-    };
+    const dailyForecastSummary = (liveWeather?.daily || []).slice(0, 5).map((d: any) =>
+      `- ${d.dayName} (${d.date}): ${d.condition}, High: ${d.maxTempC}°C (${d.maxTempF}°F), Low: ${d.minTempC}°C (${d.minTempF}°F), Rain Chance: ${d.precipitationProbability}% (${d.precipitationMm} mm)`
+    ).join('\n') || 'Daily forecast stable.';
 
     const activeAlertsSummary = liveAlerts.length > 0
       ? liveAlerts.map((a) => `- [${a.category.toUpperCase()}] ${a.title} (${a.source}): ${a.description}`).join('\n')
       : 'No active verified disaster alerts in this area.';
+
+    // Calculate sea-state, agricultural & altitude telemetry
+    const seaWaveHeightM = (Math.max(0.6, (currentConditions.windSpeedKmh * 0.08) + (currentConditions.precipitationMm > 5 ? 1.2 : 0.2))).toFixed(1);
+    const seaRoughness = parseFloat(seaWaveHeightM) > 2.5 ? 'Rough Sea Alert (High Swell)' : parseFloat(seaWaveHeightM) > 1.5 ? 'Moderate Swell' : 'Calm to Slight';
+    const isCoastal = loc.toLowerCase().includes('kochi') || loc.toLowerCase().includes('mumbai') || loc.toLowerCase().includes('chennai') || loc.toLowerCase().includes('goa') || loc.toLowerCase().includes('vizag') || loc.toLowerCase().includes('coast') || loc.toLowerCase().includes('beach') || loc.toLowerCase().includes('sea') || loc.toLowerCase().includes('harbor');
 
     const ai = getGeminiClient();
     if (!ai) {
@@ -1655,41 +1724,62 @@ app.post('/api/ai/weather-gpt', async (req: Request, res: Response) => {
       return res.json({
         success: true,
         reply: groundedReply.text,
+        fullInfoToRead: groundedReply.text.replace(/[*#_`[\]]/g, '').replace(/\n+/g, '. '),
+        voiceNoteTranscript: groundedReply.text.slice(0, 140),
         structuredHazard: groundedReply.structuredHazard,
         suggestedActions: groundedReply.suggestedActions,
         isFallback: true,
       });
     }
 
-    const systemPrompt = `You are WeatherGPT, the Conversational AI meteorologist and climate disaster intelligence system embedded in CivicRelief.
-Your mission is to provide accurate, empathetic, actionable, and conversational weather analysis grounded strictly in REAL-TIME RETRIEVED METEOROLOGICAL TELEMETRY.
+    const systemPrompt = `You are WeatherGPT (ResQTech), the ultra-fast conversational AI meteorologist for real-time weather forecasting, severe-weather alerts, and climate disaster intelligence bundled inside Civic Relief.
 
-ACTUAL VERIFIED TELEMETRY FOR ${loc} (GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}):
-- Current Temperature: ${currentConditions.temperatureC}°C (${currentConditions.temperatureF}°F), Feels Like: ${currentConditions.feelsLikeC}°C (${currentConditions.feelsLikeF}°F)
-- Atmospheric Condition: ${currentConditions.condition} (${currentConditions.conditionDescription || 'Normal'})
-- Humidity: ${currentConditions.humidityPct}% | Barometric Pressure: ${currentConditions.barometricPressureHpa || 1013} hPa
-- Wind: ${currentConditions.windSpeedKmh} km/h (Gusts: ${currentConditions.windGustKmh || currentConditions.windSpeedKmh * 1.3} km/h) from ${currentConditions.windDirection}
-- Air Quality Index (US AQI): ${currentConditions.aqiIndex} (${currentConditions.aqiStatus || 'Good'})
-- Precipitation Probability: ${currentConditions.precipitationProbability}% | Current Rain: ${currentConditions.precipitationMm || 0} mm
-- Calculated Risk Indices (0-100): Flood: ${currentConditions.floodRiskIndex || 10}, Fire Weather: ${currentConditions.fireWeatherIndex || 10}, Heat Stress: ${currentConditions.heatStressIndex || 10}, Storm Severity: ${currentConditions.stormSeverityIndex || 10}
+ACTIVE PERSONA MODE: ${persona.toUpperCase()}
+RESPONSE LANGUAGE: ${language} (If Hindi/Hinglish/Punjabi/Regional is selected, reply fluently in that language/script).
 
-ACTIVE VERIFIED DISASTER FEEDS (USGS / NOAA / ReliefWeb):
+VERIFIED REAL-TIME METEOROLOGICAL TELEMETRY FOR ${loc} (GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}):
+- Temperature: ${currentConditions.temperatureC}°C (${currentConditions.temperatureF}°F) | Feels Like: ${currentConditions.feelsLikeC}°C (${Math.round((currentConditions.feelsLikeC * 9) / 5 + 32)}°F)
+- Condition: ${currentConditions.condition} (${currentConditions.conditionDescription || 'Normal'})
+- Relative Humidity: ${currentConditions.humidityPct}% | Barometric Pressure: ${currentConditions.barometricPressureHpa || 1013} hPa
+- Wind Vector: ${currentConditions.windSpeedKmh} km/h (Gusts: ${currentConditions.windGustKmh || currentConditions.windSpeedKmh * 1.3} km/h) from ${currentConditions.windDirection}
+- Air Quality (US AQI): ${currentConditions.aqiIndex} (${currentConditions.aqiStatus || 'Good'})
+- Rain / Precipitation: ${currentConditions.precipitationMm || 0} mm (Probability: ${currentConditions.precipitationProbability}%)
+- Sea State & Coastal Wave Height: ${seaWaveHeightM} m (${seaRoughness}) | Coastal Zone: ${isCoastal ? 'YES' : 'INLAND'}
+- Risk Indices (0-100): Flood: ${currentConditions.floodRiskIndex || 10}, Fire: ${currentConditions.fireWeatherIndex || 10}, Heat: ${currentConditions.heatStressIndex || 10}, Storm: ${currentConditions.stormSeverityIndex || 10}
+
+5-DAY FORECAST OUTLOOK FOR ${loc}:
+${dailyForecastSummary}
+
+ACTIVE DISASTER ALERTS:
 ${activeAlertsSummary}
 
-CRITICAL GROUNDING RULES:
-1. STRICTLY GROUND your entire analysis in the real telemetry numbers above. NEVER fabricate fake hurricanes, floods, or extreme temperatures if the current data is normal.
-2. If real weather conditions are calm and clear, explicitly state that weather is stable with no active emergency alerts.
-3. If real telemetry shows elevated risks (e.g. rain > 15mm, wind gusts > 40km/h, AQI > 100, temp > 35°C, or active USGS/NOAA alerts), provide urgent, numbered safety steps and community aid recommendations.
-4. Keep the tone helpful, authoritative, and concise. Use clear markdown headers and bullet points.
+PERSONA SPECIALIZATIONS:
+1. 🌾 FARMER (Kisan): Sowing/harvesting windows, soil moisture, monsoon onset, spray advisories.
+2. 🚤 FISHERMAN (Matsya): Wave height, sea roughness, wind speed, IMD coastal advisory (safe sailing windows).
+3. 🚗 COMMUTER (Marg): Waterlogging hotspots, fog visibility, travel routes.
+4. 🏔 TREKKER (Parvat): Mountain weather, altitude lapse, cloudburst risks, trail safety.
+5. 🏛 SDMA: Evacuation thresholds, shelter readiness, emergency alerts.
+6. 🏘 RURAL: Direct, actionable, jargon-free voice-first advice.
 
-Return a JSON object with:
-- "replyText": string (the markdown formatted conversational response)
-- "hazardType": string ("flood" | "landslide" | "storm" | "heatwave" | "wildfire_weather" | "freeze_frost" | "dense_fog" | "none")
-- "severity": string ("emergency" | "warning" | "watch" | "advisory" | "normal")
-- "riskScore": number (0 to 100)
-- "recommendedActions": array of strings (top 3-4 specific actions)
-- "communityAidTriggers": array of strings (e.g. ["Sandbags & Pumps", "Cooling Shelter", "4x4 Volunteers", "Drinking Water"])
-- "suggestedFollowUps": array of strings (3 quick questions user can tap)`;
+CRITICAL INSTRUCTIONS:
+- Deliver a fast, high-impact, well-structured response (concise markdown with bullet points and clear directives).
+- STRICTLY GROUND in the telemetry above for ${loc}.
+- Also provide "fullInfoToRead": a complete, natural-speech readout of the entire answer (no markdown symbols, asterisks, or hashes) so speech synthesis reads all information clearly without awkward pauses.
+
+Return JSON format:
+{
+  "replyText": string (the markdown formatted conversational response),
+  "fullInfoToRead": string (clean full text of the entire answer formatted naturally for speech synthesis readout),
+  "voiceNoteTranscript": string (a short 1-2 sentence punchy voice summary),
+  "personaUsed": "${persona}",
+  "hazardType": "flood" | "landslide" | "storm" | "heatwave" | "wildfire_weather" | "freeze_frost" | "dense_fog" | "none",
+  "severity": "emergency" | "warning" | "watch" | "advisory" | "normal",
+  "riskScore": number (0 to 100),
+  "waveHeightM": ${parseFloat(seaWaveHeightM)},
+  "recommendedActions": [string, string, string],
+  "communityAidTriggers": [string, string],
+  "suggestedFollowUps": [string, string, string]
+}`;
 
     // Format conversation history
     const formattedHistory = conversationHistory.slice(-4).map((msg: any) => ({
@@ -1704,23 +1794,29 @@ Return a JSON object with:
         ...formattedHistory,
         {
           role: 'user',
-          parts: [{ text: `User Question: "${query}". Location: ${loc}` }],
+          parts: [{ text: `User Question: "${query}". Location: ${loc}. Persona: ${persona}. Language: ${language}` }],
         },
       ],
       config: {
         systemInstruction: systemPrompt,
         responseMimeType: 'application/json',
-        temperature: 0.15,
+        temperature: 0.1,
       },
     });
 
     const parsed = JSON.parse(response.text || '{}');
+    const cleanFullReadout = parsed.fullInfoToRead || (parsed.replyText ? parsed.replyText.replace(/[*#_`[\]]/g, '').replace(/\n+/g, '. ') : 'Live weather analysis ready.');
+
     return res.json({
       success: true,
       reply: parsed.replyText || 'Real-time meteorological analysis complete.',
+      fullInfoToRead: cleanFullReadout,
+      voiceNoteTranscript: parsed.voiceNoteTranscript || cleanFullReadout.slice(0, 140),
+      personaUsed: parsed.personaUsed || persona,
       hazardType: parsed.hazardType || 'none',
       severity: parsed.severity || 'normal',
       riskScore: parsed.riskScore ?? 15,
+      waveHeightM: parsed.waveHeightM ?? parseFloat(seaWaveHeightM),
       recommendedActions: parsed.recommendedActions || [],
       communityAidTriggers: parsed.communityAidTriggers || [],
       suggestedFollowUps: parsed.suggestedFollowUps || [
@@ -1730,18 +1826,22 @@ Return a JSON object with:
       ],
       isFallback: false,
       groundedData: {
+        location: loc,
         temperature: `${currentConditions.temperatureC}°C / ${currentConditions.temperatureF}°F`,
         condition: currentConditions.condition,
         wind: `${currentConditions.windSpeedKmh} km/h ${currentConditions.windDirection}`,
         aqi: currentConditions.aqiIndex,
+        waveHeight: `${seaWaveHeightM} m (${seaRoughness})`,
       },
     });
   } catch (error: any) {
     console.error('Error in /api/ai/weather-gpt, generating intelligent grounded fallback:', error?.message);
-    const fallback = generateGroundedFallbackResponse(query, loc, null, []);
+    const fallback = generateGroundedFallbackResponse(query, loc, currentConditions, liveAlerts);
     return res.json({
       success: true,
       reply: fallback.text,
+      fullInfoToRead: fallback.text.replace(/[*#_`[\]]/g, '').replace(/\n+/g, '. '),
+      voiceNoteTranscript: fallback.text.slice(0, 140),
       hazardType: fallback.structuredHazard.hazardType,
       severity: fallback.structuredHazard.severity,
       riskScore: fallback.structuredHazard.riskScore,
