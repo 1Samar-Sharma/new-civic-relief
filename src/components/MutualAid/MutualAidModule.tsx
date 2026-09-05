@@ -19,7 +19,7 @@ import {
   Scale,
   ArrowLeft,
   Lock,
-  Flame,
+  Wind,
 } from 'lucide-react';
 import {
   HelpRequest,
@@ -44,7 +44,6 @@ interface MutualAidModuleProps {
   onOfferVolunteer: (offer: Omit<VolunteerOffer, 'id' | 'joinedDate' | 'missionsCompleted'>) => void;
   onPledgeHelp: (requestId: string, volunteerName: string) => void;
   onBackToMap?: () => void;
-  onOpenWildfireModule?: () => void;
 }
 
 export const MutualAidModule: React.FC<MutualAidModuleProps> = ({
@@ -56,7 +55,6 @@ export const MutualAidModule: React.FC<MutualAidModuleProps> = ({
   onOfferVolunteer,
   onPledgeHelp,
   onBackToMap,
-  onOpenWildfireModule,
 }) => {
   const { currentUser, isAuthorOrAdmin, setIsRulesModalOpen } = useAuth();
 
@@ -81,7 +79,7 @@ export const MutualAidModule: React.FC<MutualAidModuleProps> = ({
   const [volName, setVolName] = useState(currentUser?.displayName || '');
   const [volPhone, setVolPhone] = useState(currentUser?.phoneNumber || '');
   const [volLocation, setVolLocation] = useState(userAddress);
-  const [volSkills, setVolSkills] = useState<string[]>(['First-Aid / CPR', 'Wildfire Evacuation Transport']);
+  const [volSkills, setVolSkills] = useState<string[]>(['First-Aid / CPR', 'Flood & Storm Evacuation Transport']);
   const [volCapacity, setVolCapacity] = useState('');
   const [volRadius, setVolRadius] = useState<number>(10);
 
@@ -91,7 +89,7 @@ export const MutualAidModule: React.FC<MutualAidModuleProps> = ({
   // Quick category items
   const categories: { key: AidCategory; label: string; icon: any; color: string }[] = [
     { key: 'shelter', label: 'Emergency Shelter', icon: Home, color: 'text-emerald-400' },
-    { key: 'wildfire_evac', label: 'Wildfire / Evacuation', icon: Flame, color: 'text-orange-400' },
+    { key: 'wildfire_evac', label: 'Severe Weather / Evac', icon: Wind, color: 'text-sky-400' },
     { key: 'medical', label: 'Medical & First Aid', icon: HeartPulse, color: 'text-rose-400' },
     { key: 'food_water', label: 'Food & Clean Water', icon: Utensils, color: 'text-amber-400' },
     { key: 'manpower', label: 'Manpower / Rescue', icon: Users, color: 'text-blue-400' },
@@ -269,17 +267,6 @@ export const MutualAidModule: React.FC<MutualAidModuleProps> = ({
               <Shield className="w-4 h-4" />
               <span>I Can Help</span>
             </button>
-
-            {onOpenWildfireModule && (
-              <button
-                onClick={onOpenWildfireModule}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-orange-500/20 hover:bg-orange-500/30 text-orange-200 border border-orange-500/40 text-xs font-bold transition-all shadow-md"
-                title="Open Wildfire Spotter & Perimeter Defense"
-              >
-                <Flame className="w-4 h-4 text-orange-400" />
-                <span>Wildfire Portal</span>
-              </button>
-            )}
           </div>
         </div>
       </div>

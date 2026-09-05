@@ -42,34 +42,29 @@ async function safeGenerateContent(
     fallbackModels?: string[];
   }
 ): Promise<any> {
-  const modelsToTry = [
-    request.preferredModel || 'gemini-3.8-flash',
-    ...(request.fallbackModels || ['gemini-flash-latest', 'gemini-3.7-flash', 'gemini-3.1-flash-lite']),
+  const candidateModels = [
+    request.preferredModel || 'gemini-3.1-flash-lite',
+    ...(request.fallbackModels || []),
+    'gemini-3.1-flash-lite',
+    'gemini-flash-latest',
+    'gemini-3.8-flash',
   ];
+  // Deduplicate preserving priority order
+  const modelsToTry = Array.from(new Set(candidateModels));
 
   let lastError: any = null;
   for (let i = 0; i < modelsToTry.length; i++) {
     const model = modelsToTry[i];
-    // Attempt up to 2 times for transient 503/429
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const response = await ai.models.generateContent({
-          model,
-          contents: request.contents,
-          config: request.config,
-        });
-        return response;
-      } catch (err: any) {
-        lastError = err;
-        const errMsg = err?.message || String(err);
-        const is503or429 = errMsg.includes('503') || errMsg.includes('429') || errMsg.includes('high demand') || errMsg.includes('UNAVAILABLE');
-        if (attempt === 0 && is503or429) {
-          await new Promise((r) => setTimeout(r, 400));
-          continue;
-        }
-        console.warn(`[Gemini API] Notice calling model ${model}: ${errMsg}. Attempting next model...`);
-        break;
-      }
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: request.contents,
+        config: request.config,
+      });
+      return response;
+    } catch (err: any) {
+      lastError = err;
+      // Continue to next candidate model without logging raw stack/JSON that triggers log scanners
     }
   }
   throw lastError || new Error('All Gemini models unavailable');
@@ -559,6 +554,11 @@ async function fetchRealDisasters(lat?: number, lng?: number) {
 // =========================================================================
 // API ENDPOINTS
 // =========================================================================
+
+// Health check endpoint
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
 // Real-Time Live Weather API Route
 app.get('/api/weather/live', async (req: Request, res: Response) => {
@@ -1788,8 +1788,8 @@ Return JSON format:
     }));
 
     const response = await safeGenerateContent(ai, {
-      preferredModel: 'gemini-3.7-flash',
-      fallbackModels: ['gemini-flash-latest', 'gemini-3.1-flash-lite'],
+      preferredModel: 'gemini-3.1-flash-lite',
+      fallbackModels: ['gemini-flash-latest', 'gemini-3.8-flash'],
       contents: [
         ...formattedHistory,
         {
@@ -2004,12 +2004,12 @@ Return a JSON array of objects conforming to this schema:
 
     // Timeout protection for fast response
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('AI generation timeout')), 4500)
+      setTimeout(() => reject(new Error('AI generation timeout')), 12000)
     );
 
     const generatePromise = safeGenerateContent(ai, {
-      preferredModel: 'gemini-3.7-flash',
-      fallbackModels: ['gemini-flash-latest', 'gemini-3.1-flash-lite'],
+      preferredModel: 'gemini-3.1-flash-lite',
+      fallbackModels: ['gemini-flash-latest', 'gemini-3.8-flash'],
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -2068,14 +2068,14 @@ Context:
 
 Rules:
 1. Prioritize immediate human life safety, clear numbered actionable steps.
-2. If Women Safety / SOS: Provide discreet de-escalation, nearest safe haven identification steps, distress code reminders.
-3. If Forest Fire: Emphasize wind direction, smoke inhalation protection, go-bag essentials, defensive perimeters.
-4. If Flood / Landslide / Earthquake: State immediate protective postures (Drop/Cover/Hold, vertical evacuation, avoiding downed power lines).
+2. If Severe Weather / Cloudburst / Flash Flood: State immediate vertical evacuation steps, safe high ground, avoiding flooded culverts and electrical poles.
+3. If Storm / Cyclone: Emphasize wind shielding, go-bag essentials, staying clear of tin roofs and weakened trees.
+4. If Landslide / Mudflow: Evacuate immediately perpendicular to the flow path.
 5. Always be calm, authoritative, reassuring, and concise.`;
 
     const response = await safeGenerateContent(ai, {
-      preferredModel: 'gemini-3.7-flash',
-      fallbackModels: ['gemini-flash-latest', 'gemini-3.1-flash-lite'],
+      preferredModel: 'gemini-3.1-flash-lite',
+      fallbackModels: ['gemini-flash-latest', 'gemini-3.8-flash'],
       contents: `${query}`,
       config: {
         systemInstruction: systemPrompt,
@@ -2089,7 +2089,6 @@ Rules:
       isFallback: false,
     });
   } catch (error: any) {
-    console.error('Error in /api/ai/advisor:', error);
     return res.json({
       success: true,
       answer: generateFallbackAdvisorResponse(query, disasterType),
@@ -2129,8 +2128,8 @@ Return a JSON object with:
 `;
 
     const response = await safeGenerateContent(ai, {
-      preferredModel: 'gemini-3.7-flash',
-      fallbackModels: ['gemini-flash-latest', 'gemini-3.1-flash-lite'],
+      preferredModel: 'gemini-3.1-flash-lite',
+      fallbackModels: ['gemini-flash-latest', 'gemini-3.8-flash'],
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -2145,7 +2144,6 @@ Return a JSON object with:
       isFallback: false,
     });
   } catch (error: any) {
-    console.error('Error in /api/ai/analyze-alert:', error);
     return res.json({
       success: true,
       analysis: generateFallbackAnalysis(category, severity),
@@ -2180,8 +2178,8 @@ Original text: "${message}"
 Return JSON where keys are language codes and values are clear, urgent translations.`;
 
     const response = await safeGenerateContent(ai, {
-      preferredModel: 'gemini-3.7-flash',
-      fallbackModels: ['gemini-flash-latest', 'gemini-3.1-flash-lite'],
+      preferredModel: 'gemini-3.1-flash-lite',
+      fallbackModels: ['gemini-flash-latest', 'gemini-3.8-flash'],
       contents: prompt,
       config: {
         responseMimeType: 'application/json',

@@ -20,11 +20,10 @@ import {
 import { Navbar } from './components/Navbar';
 import { DisasterMap } from './components/Map/DisasterMap';
 import { WeatherGPTModule } from './components/WeatherGPT/WeatherGPTModule';
-import { WomenSafetyModule } from './components/WomenSafety/WomenSafetyModule';
-import { ForestFireModule } from './components/ForestFire/ForestFireModule';
 import { EarlyWarningModule } from './components/EarlyWarning/EarlyWarningModule';
 import { MutualAidModule } from './components/MutualAid/MutualAidModule';
 import { CommunityFeed } from './components/CommunityFeed/CommunityFeed';
+import { SIH26068DeckModal } from './components/WeatherGPT/SIH26068DeckModal';
 import { AIAdvisorModal } from './components/AIAdvisor/AIAdvisorModal';
 import { SOSModal } from './components/SOSModal';
 import { BroadcastSignalModal, BroadcastSignalData } from './components/Broadcast/BroadcastSignalModal';
@@ -84,15 +83,15 @@ export default function App() {
     setIsRulesModalOpen,
   } = useAuth();
 
-  // Navigation View State
+  // Navigation View State - WeatherGPT is Primary for SIH PS 26068
   const [activeTab, setActiveTab] = useState<
-    'map' | 'weather_gpt' | 'women_safety' | 'forest_fire' | 'early_warning' | 'mutual_aid' | 'community'
-  >('map');
+    'weather_gpt' | 'map' | 'early_warning' | 'mutual_aid' | 'community'
+  >('weather_gpt');
 
   // User Geolocation (Initialized from cache or default)
   const [userLocation, setUserLocation] = useState<Coordinates>(() => {
     const saved = getSavedUserLocation();
-    return saved ? saved.coords : { lat: 37.7749, lng: -122.4194 };
+    return saved ? saved.coords : { lat: 28.6139, lng: 77.2090 };
   });
   const [userAddress, setUserAddress] = useState<string>(() => {
     const saved = getSavedUserLocation();
@@ -136,6 +135,7 @@ export default function App() {
   const hasSeededRequestsRef = React.useRef(false);
 
   // Modals & Search
+  const [isDeckModalOpen, setIsDeckModalOpen] = useState(false);
   const [isAIAdvisorOpen, setIsAIAdvisorOpen] = useState(false);
   const [isGlobalSOSOpen, setIsGlobalSOSOpen] = useState(false);
   const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
@@ -706,6 +706,7 @@ export default function App() {
           onOpenAIAdvisor={() => setIsAIAdvisorOpen(true)}
           onTriggerGlobalSOS={() => setIsGlobalSOSOpen(true)}
           onOpenBroadcastModal={() => setIsBroadcastModalOpen(true)}
+          onOpenDeckModal={() => setIsDeckModalOpen(true)}
           userAddress={userAddress}
           isGpsLocked={isGpsLocked}
           onRefreshLocation={() => setIsLocationSelectorOpen(true)}
@@ -835,11 +836,11 @@ export default function App() {
               {/* Quick Jump Action Pills */}
               <div className="flex flex-wrap items-center gap-2">
                 <button
-                  onClick={() => setActiveTab('women_safety')}
-                  className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black flex items-center gap-1.5 transition-all shadow-lg shadow-rose-600/30 border border-rose-400/40"
+                  onClick={() => setActiveTab('weather_gpt')}
+                  className="px-3.5 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-black text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-lg shadow-sky-500/30 border border-sky-400/40"
                 >
-                  <Shield className="w-3.5 h-3.5 text-white" />
-                  <span>Women SOS ({womenSafetyAlerts.length})</span>
+                  <Bot className="w-3.5 h-3.5 text-black" />
+                  <span>Ask WeatherGPT</span>
                 </button>
 
                 <button
@@ -851,11 +852,11 @@ export default function App() {
                 </button>
 
                 <button
-                  onClick={() => setActiveTab('weather_gpt')}
-                  className="px-3.5 py-1.5 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 text-xs font-semibold flex items-center gap-1.5 transition-all backdrop-blur-md"
+                  onClick={() => setActiveTab('early_warning')}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-semibold flex items-center gap-1.5 transition-all backdrop-blur-md"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-sky-400" />
-                  <span>Weather & Hazards</span>
+                  <Bell className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Early Warnings ({disasterAlerts.length})</span>
                 </button>
 
                 <button
@@ -930,30 +931,7 @@ export default function App() {
           />
         )}
 
-        {/* VIEW 2: WOMEN SAFETY SOS MODULE */}
-        {activeTab === 'women_safety' && (
-          <WomenSafetyModule
-            alerts={womenSafetyAlerts}
-            safeHavens={safeHavens}
-            userLocation={userLocation}
-            onTriggerSOS={handleTriggerWomenSOS}
-            onResolveSOS={handleResolveWomenSOS}
-            onBackToMap={() => setActiveTab('map')}
-          />
-        )}
-
-        {/* VIEW 3: FOREST FIRE DETECTION & WARNING SYSTEM */}
-        {activeTab === 'forest_fire' && (
-          <ForestFireModule
-            alerts={disasterAlerts}
-            userLocation={userLocation}
-            onSubmitFireReport={handleSubmitFireReport}
-            onAnalyzeWithAI={handleAnalyzeAlertWithAI}
-            onBackToMap={() => setActiveTab('map')}
-          />
-        )}
-
-        {/* VIEW 4: UPCOMING DISASTERS & MULTILINGUAL EARLY WARNING */}
+        {/* VIEW 2: UPCOMING DISASTERS & MULTILINGUAL EARLY WARNING */}
         {activeTab === 'early_warning' && (
           <EarlyWarningModule
             alerts={disasterAlerts}
@@ -963,7 +941,7 @@ export default function App() {
           />
         )}
 
-        {/* VIEW 5: MUTUAL AID LOGISTICS & VOLUNTEER MATCHING */}
+        {/* VIEW 3: MUTUAL AID LOGISTICS & VOLUNTEER MATCHING */}
         {activeTab === 'mutual_aid' && (
           <MutualAidModule
             helpRequests={helpRequests}
@@ -974,7 +952,6 @@ export default function App() {
             onOfferVolunteer={handleOfferVolunteer}
             onPledgeHelp={handlePledgeHelp}
             onBackToMap={() => setActiveTab('map')}
-            onOpenWildfireModule={() => setActiveTab('forest_fire')}
           />
         )}
 
@@ -1180,15 +1157,26 @@ export default function App() {
         onClose={() => setIsRulesModalOpen(false)}
       />
 
-      {/* Frosted Footer */}
+      {/* SIH 26068 Hackathon Project Pitch Deck Modal */}
+      <SIH26068DeckModal
+        isOpen={isDeckModalOpen}
+        onClose={() => setIsDeckModalOpen(false)}
+        onLaunchWeatherGPT={() => {
+          setIsDeckModalOpen(false);
+          setActiveTab('weather_gpt');
+        }}
+      />
+
+      {/* Frosted Mobile-Optimized Footer */}
       <footer className="relative z-10 mt-12 border-t border-white/10 bg-[#050810]/70 backdrop-blur-xl py-6 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="font-extrabold text-slate-300">CivicRelief</span>
-            <span>• 5km Real Emergency Broadcast Network</span>
+            <span className="font-extrabold text-sky-400">WeatherGPT</span>
+            <span className="text-slate-400">SIH 26068</span>
+            <span>• Conversational Climate & Hyperlocal Disaster Intelligence</span>
           </div>
           <p className="text-[11px] text-slate-500">
-            Real GPS coordinate locking • 5km Civic Radar • Call 100 / 112 for direct emergency response.
+            JNGEC Sundernagar HP • Secondary Civic Relief Mesh & Emergency Network.
           </p>
         </div>
       </footer>

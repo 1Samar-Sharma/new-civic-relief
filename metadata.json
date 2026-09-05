@@ -1,6 +1,6 @@
 {
-  "name": "CivicRelief - Unified Community Disaster Response Hub",
-  "description": "A unified community-driven emergency and disaster response platform powered by WeatherGPT: Conversational AI for real-time weather forecasting, extreme climate alerts (floods, landslides, storms, heatwaves), instant SOS women safety alerts, forest fire detection, mutual aid logistics, and 5km civilian mesh broadcasting.",
+  "name": "WeatherGPT - Conversational AI & Hyperlocal Disaster Intelligence (SIH 26068)",
+  "description": "Smart India Hackathon PS 26068: Multilingual, voice-enabled conversational WeatherGPT with persona-driven advisories (farmers, fishermen, commuters, trekkers, SDMA) and secondary civic relief mesh.",
   "requestFramePermissions": ["geolocation", "microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -5,7 +5,7 @@ import {
   Send,
   MapPin,
   Shield,
-  Flame,
+  Wind,
   Droplets,
   HeartPulse,
   Home,
@@ -61,7 +61,7 @@ export const BroadcastSignalModal: React.FC<BroadcastSignalModalProps> = ({
 }) => {
   const [urgency, setUrgency] = useState<'critical_urgent' | 'high' | 'standard'>('critical_urgent');
   const [radiusKm, setRadiusKm] = useState<number>(5.0);
-  const [category, setCategory] = useState<string>('women_safety');
+  const [category, setCategory] = useState<string>('weather_emergency');
   const [title, setTitle] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [includeLocation, setIncludeLocation] = useState<boolean>(true);
@@ -75,28 +75,20 @@ export const BroadcastSignalModal: React.FC<BroadcastSignalModalProps> = ({
   // Quick preset templates
   const presets = [
     {
-      category: 'women_safety',
-      icon: Shield,
-      label: 'Personal Safety / Under Threat',
+      category: 'weather_emergency',
+      icon: Wind,
+      label: 'Severe Weather / Cloudburst Alert',
       defaultUrgency: 'critical_urgent' as const,
-      defaultTitle: 'URGENT: Individual Under Threat - Need Safe Refuge & Escort',
-      defaultDesc: 'Feeling followed / in immediate danger. Seeking lit safe haven or guardian escort immediately.',
-    },
-    {
-      category: 'wildfire',
-      icon: Flame,
-      label: 'Wildfire / Evacuation Assist',
-      defaultUrgency: 'critical_urgent' as const,
-      defaultTitle: 'Urgent Fire Evacuation & Transport Required',
-      defaultDesc: 'Smoke/fire encroaching rapidly. Need 4x4 transport assistance for family and pets.',
+      defaultTitle: 'URGENT: Severe Cloudburst / Storm Inundation - Need Evacuation',
+      defaultDesc: 'Rapidly rising water and severe wind threat. Need urgent transport to nearest safe haven for family.',
     },
     {
       category: 'flood',
       icon: Droplets,
-      label: 'Flood / Water Inundation',
-      defaultUrgency: 'high' as const,
+      label: 'Flash Flood / Water Inundation',
+      defaultUrgency: 'critical_urgent' as const,
       defaultTitle: 'Rising Flood Water - Sandbags & Manpower Needed',
-      defaultDesc: 'Water level entering basement/ground floor. Need assistance moving supplies or clearing drain.',
+      defaultDesc: 'Water level entering basement/ground floor. Need assistance moving vulnerable residents and supplies.',
     },
     {
       category: 'medical',
@@ -113,6 +105,14 @@ export const BroadcastSignalModal: React.FC<BroadcastSignalModalProps> = ({
       defaultUrgency: 'high' as const,
       defaultTitle: 'Emergency Shelter Needed for Displaced Family',
       defaultDesc: 'Displaced due to local hazard. Looking for clean dry lodging for 3 people for 2 nights.',
+    },
+    {
+      category: 'manpower',
+      icon: Users,
+      label: 'Community Rescue & Route Clearing',
+      defaultUrgency: 'high' as const,
+      defaultTitle: 'Debris / Fallen Tree Blocking Access Road',
+      defaultDesc: 'Access road blocked by fallen branches/mud. Need 4-5 volunteers with shovels or chainsaws.',
     },
   ];
 
